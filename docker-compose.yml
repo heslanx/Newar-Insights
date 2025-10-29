@@ -1,0 +1,160 @@
+version: '3.8'
+
+# ==========================================
+# Newar Insights - Docker Compose
+# Development & Production Setup
+# ==========================================
+
+services:
+  # ==========================================
+  # REDIS - Pub/Sub for bot communication
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    container_name: newar-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - newar-network
+
+  # ==========================================
+  # ADMIN API - User & Token Management
+  # Port: 8081
+  # ==========================================
+  admin-api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.admin
+    container_name: newar-admin-api
+    ports:
+      - "8081:8081"
+    environment:
+      - DATABASE_TYPE=sqlite
+      - SQLITE_PATH=/app/storage/database/newar.db
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-admin_secret_change_me}
+      - ADMIN_API_PORT=8081
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - ./storage:/app/storage
+      - ./migrations:/app/migrations
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - newar-network
+    restart: unless-stopped
+
+  # ==========================================
+  # API GATEWAY - Public API
+  # Port: 8080
+  # ==========================================
+  api-gateway:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.gateway
+    container_name: newar-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_TYPE=sqlite
+      - SQLITE_PATH=/app/storage/database/newar.db
+      - REDIS_URL=redis://redis:6379
+      - API_GATEWAY_PORT=8080
+      - API_GATEWAY_RATE_LIMIT=${API_GATEWAY_RATE_LIMIT:-10}
+      - BOT_MANAGER_URL=http://bot-manager:8082
+      - STORAGE_TYPE=local
+      - STORAGE_PATH=/app/storage/recordings
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-*}
+    volumes:
+      - ./storage:/app/storage
+      - ./migrations:/app/migrations
+    depends_on:
+      - redis
+      - admin-api
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - newar-network
+    restart: unless-stopped
+
+  # ==========================================
+  # BOT MANAGER - Bot Orchestration
+  # Port: 8082
+  # ==========================================
+  bot-manager:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.manager
+    container_name: newar-bot-manager
+    ports:
+      - "8082:8082"
+    environment:
+      - DATABASE_TYPE=sqlite
+      - SQLITE_PATH=/app/storage/database/newar.db
+      - REDIS_URL=redis://redis:6379
+      - BOT_MANAGER_PORT=8082
+      - BOT_IMAGE=${BOT_IMAGE:-newar-recording-bot:latest}
+      - MAX_CONCURRENT_BOTS=${MAX_CONCURRENT_BOTS:-10}
+      - STORAGE_TYPE=local
+      - STORAGE_PATH=/app/storage/recordings
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - ./storage:/app/storage
+      - /var/run/docker.sock:/var/run/docker.sock  # CRITICAL: Docker socket access
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - newar-network
+    restart: unless-stopped
+
+# ==========================================
+# VOLUMES
+# ==========================================
+volumes:
+  redis-data:
+    driver: local
+
+# ==========================================
+# NETWORKS
+# ==========================================
+networks:
+  newar-network:
+    driver: bridge
+    name: newar-network
+
+# ==========================================
+# NOTES:
+# ==========================================
+# 1. Build recording-bot image separately:
+#    docker build -t newar-recording-bot:latest -f docker/Dockerfile.bot .
+#
+# 2. The bot-manager spawns recording-bot containers dynamically,
+#    so there's no recording-bot service in this compose file.
+#
+# 3. For production, replace SQLite with Supabase:
+#    - Set DATABASE_TYPE=supabase
+#    - Set SUPABASE_URL and SUPABASE_KEY
+#
+# 4. Storage is shared across all services via volume mount.
+#
+# 5. Bot Manager needs Docker socket access to spawn bot containers.
