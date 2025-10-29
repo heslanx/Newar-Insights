@@ -1,0 +1,31 @@
+# ==========================================
+# Dockerfile for Recording Bot
+# Uses official Playwright image
+# ==========================================
+
+FROM mcr.microsoft.com/playwright:v1.40.0-jammy
+
+WORKDIR /app
+
+# Install Node.js dependencies
+COPY services/recording-bot/package*.json ./
+RUN npm ci --only=production
+
+# Copy source code
+COPY services/recording-bot/src ./src
+COPY services/recording-bot/tsconfig.json ./
+
+# Build TypeScript
+RUN npm install -g esbuild && \
+    npm run build && \
+    npm uninstall -g esbuild
+
+# Create storage directory
+RUN mkdir -p /app/storage/recordings/temp
+
+# Set environment variables (will be overridden at runtime)
+ENV NODE_ENV=production
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# Run the bot
+CMD ["node", "dist/index.js"]

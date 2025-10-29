@@ -1,0 +1,24 @@
+{
+  "name": "newar-recording-bot",
+  "version": "1.0.0",
+  "description": "Meeting recording bot using Playwright browser automation",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --outfile=dist/index.js --external:playwright",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "keywords": ["recording", "bot", "playwright", "google-meet", "teams"],
+  "author": "Newar Team",
+  "license": "MIT",
+  "dependencies": {
+    "playwright": "^1.40.0",
+    "redis": "^4.6.12"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "esbuild": "^0.19.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}
