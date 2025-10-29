@@ -1,6 +1,6 @@
-const ADMIN_API_URL = process.env.ADMIN_API_URL || 'http://localhost:8081';
-const API_GATEWAY_URL = process.env.API_GATEWAY_URL || 'http://localhost:8080';
-const ADMIN_API_KEY = process.env.ADMIN_API_KEY || 'admin_dev_secret_key_123';
+const ADMIN_API_URL = process.env.NEXT_PUBLIC_ADMIN_API_URL || 'http://localhost:8081';
+const API_GATEWAY_URL = process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:8080';
+const ADMIN_API_KEY = process.env.NEXT_PUBLIC_ADMIN_API_KEY || 'admin_dev_secret_key_123';
 
 async function fetcher<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -20,7 +20,7 @@ async function fetcher<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export const adminAPI = {
-  async getUsers() {
+  async getUsers(): Promise<{ data: any[]; total: number }> {
     return fetcher(`${ADMIN_API_URL}/admin/users?limit=100`, {
       headers: { 'X-Admin-API-Key': ADMIN_API_KEY },
     });
@@ -75,7 +75,86 @@ export const gatewayAPI = {
     });
   },
 
+  async getRecordingStatus(apiKey: string, platform: string, meetingId: string) {
+    return fetcher(`${API_GATEWAY_URL}/recordings/${platform}/${meetingId}`, {
+      headers: { 'X-API-Key': apiKey },
+    });
+  },
+
+  async downloadRecording(apiKey: string, platform: string, meetingId: string) {
+    const response = await fetch(`${API_GATEWAY_URL}/recordings/${platform}/${meetingId}/download`, {
+      headers: { 'X-API-Key': apiKey },
+    });
+    if (!response.ok) throw new Error('Download failed');
+    return response.blob();
+  },
+
   async getHealth() {
     return fetcher(`${API_GATEWAY_URL}/health`);
+  },
+};
+
+// Admin APIs for managing all recordings (across all users)
+export const adminRecordingsAPI = {
+  async getAllRecordings() {
+    return fetcher(`${ADMIN_API_URL}/admin/recordings?limit=1000`, {
+      headers: { 'X-Admin-API-Key': ADMIN_API_KEY },
+    });
+  },
+
+  async getRecordingsByUser(userId: number) {
+    return fetcher(`${ADMIN_API_URL}/admin/users/${userId}/recordings`, {
+      headers: { 'X-Admin-API-Key': ADMIN_API_KEY },
+    });
+  },
+
+  async deleteRecording(recordingId: number) {
+    return fetcher(`${ADMIN_API_URL}/admin/recordings/${recordingId}`, {
+      method: 'DELETE',
+      headers: { 'X-Admin-API-Key': ADMIN_API_KEY },
+    });
+  },
+};
+
+// Bot Manager APIs
+export const botManagerAPI = {
+  async getActiveBots() {
+    return fetcher(`${ADMIN_API_URL}/admin/bots/active`, {
+      headers: { 'X-Admin-API-Key': ADMIN_API_KEY },
+    });
+  },
+
+  async getBotLogs(containerId: string) {
+    return fetcher(`${ADMIN_API_URL}/admin/bots/${containerId}/logs`, {
+      headers: { 'X-Admin-API-Key': ADMIN_API_KEY },
+    });
+  },
+
+  async stopBot(containerId: string) {
+    return fetcher(`${ADMIN_API_URL}/admin/bots/${containerId}/stop`, {
+      method: 'POST',
+      headers: { 'X-Admin-API-Key': ADMIN_API_KEY },
+    });
+  },
+};
+
+// System Health APIs
+export const systemHealthAPI = {
+  async getFullHealth() {
+    return fetcher(`${ADMIN_API_URL}/admin/system/health`, {
+      headers: { 'X-Admin-API-Key': ADMIN_API_KEY },
+    });
+  },
+
+  async getMetrics() {
+    return fetcher(`${ADMIN_API_URL}/admin/system/metrics`, {
+      headers: { 'X-Admin-API-Key': ADMIN_API_KEY },
+    });
+  },
+
+  async getLogs(service: string, limit = 100) {
+    return fetcher(`${ADMIN_API_URL}/admin/system/logs?service=${service}&limit=${limit}`, {
+      headers: { 'X-Admin-API-Key': ADMIN_API_KEY },
+    });
   },
 };

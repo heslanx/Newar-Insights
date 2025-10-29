@@ -1,20 +1,30 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { adminAPI, gatewayAPI } from '@/lib/api';
-import type { User, Meeting, HealthStatus } from '@/lib/types';
+import { adminAPI, adminRecordingsAPI, systemHealthAPI } from '@/lib/api';
+import type { User, Meeting } from '@/lib/types';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import {
+  Users,
+  Activity,
+  CheckCircle,
+  Clock,
+  AlertCircle,
+  TrendingUp,
+  Server,
+  PlayCircle,
+} from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 import { formatDate } from '@/lib/utils';
 
 export default function Dashboard() {
   const [users, setUsers] = useState<User[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
-  const [health, setHealth] = useState<{ admin: HealthStatus | null; gateway: HealthStatus | null }>({
-    admin: null,
-    gateway: null,
-  });
   const [loading, setLoading] = useState(true);
-  const [newUser, setNewUser] = useState({ email: '', name: '', max_concurrent_bots: 5 });
-  const [selectedToken, setSelectedToken] = useState<string | null>(null);
+  const [activityData, setActivityData] = useState<any[]>([]);
 
   useEffect(() => {
     loadData();
@@ -24,14 +34,18 @@ export default function Dashboard() {
 
   async function loadData() {
     try {
-      const [usersData, adminHealth, gatewayHealth] = await Promise.all([
+      const [usersData, recordingsData] = await Promise.all([
         adminAPI.getUsers(),
-        adminAPI.getHealth(),
-        gatewayAPI.getHealth(),
+        adminRecordingsAPI.getAllRecordings().catch(() => ({ data: [] })),
       ]);
 
-      setUsers(usersData.users || []);
-      setHealth({ admin: adminHealth, gateway: gatewayHealth });
+      setUsers(usersData.data || []);
+      const recordingsArray = (recordingsData as any).data || [];
+      setMeetings(recordingsArray);
+
+      // Generate activity data for the last 7 days
+      generateActivityData(recordingsArray);
+
       setLoading(false);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -39,199 +53,287 @@ export default function Dashboard() {
     }
   }
 
-  async function handleCreateUser(e: React.FormEvent) {
-    e.preventDefault();
-    try {
-      await adminAPI.createUser(newUser);
-      setNewUser({ email: '', name: '', max_concurrent_bots: 5 });
-      loadData();
-      alert('Usuário criado com sucesso!');
-    } catch (error: any) {
-      alert('Erro: ' + error.message);
-    }
-  }
+  function generateActivityData(meetings: Meeting[]) {
+    const today = new Date();
+    const data = [];
 
-  async function handleGenerateToken(userId: number) {
-    try {
-      const result = await adminAPI.generateToken(userId);
-      setSelectedToken(result.token);
-      alert('Token gerado! Copie agora pois não será mostrado novamente.');
-    } catch (error: any) {
-      alert('Erro: ' + error.message);
-    }
-  }
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
 
-  async function handleDeleteUser(id: number) {
-    if (!confirm('Tem certeza que deseja deletar este usuário?')) return;
+      const dayMeetings = meetings.filter(m =>
+        m.created_at.startsWith(dateStr)
+      );
 
-    try {
-      await adminAPI.deleteUser(id);
-      loadData();
-      alert('Usuário deletado com sucesso!');
-    } catch (error: any) {
-      alert('Erro: ' + error.message);
+      data.push({
+        date: date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }),
+        total: dayMeetings.length,
+        completed: dayMeetings.filter(m => m.status === 'completed').length,
+        failed: dayMeetings.filter(m => m.status === 'failed').length,
+      });
     }
+
+    setActivityData(data);
   }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-lg">Carregando...</div>
       </div>
     );
   }
 
-  const activeRecordings = meetings.filter(m => ['recording', 'active'].includes(m.status)).length;
+  const activeRecordings = meetings.filter(m => ['joining', 'active', 'recording'].includes(m.status)).length;
+  const completedToday = meetings.filter(m => {
+    const today = new Date().toISOString().split('T')[0];
+    return m.status === 'completed' && m.completed_at?.startsWith(today);
+  }).length;
+  const failedRecordings = meetings.filter(m => m.status === 'failed').length;
+
+  const statusData = [
+    { name: 'Ativas', value: activeRecordings, color: '#10b981' },
+    { name: 'Completas', value: meetings.filter(m => m.status === 'completed').length, color: '#3b82f6' },
+    { name: 'Falhadas', value: failedRecordings, color: '#ef4444' },
+    { name: 'Aguardando', value: meetings.filter(m => m.status === 'requested').length, color: '#f59e0b' },
+  ];
+
+  const recentActivity = meetings.slice(0, 8);
 
   return (
-    <div className=\"min-h-screen bg-gray-50\">
+    <div className="space-y-8">
       {/* Header */}
-      <header className=\"bg-white border-b border-gray-200\">
-        <div className=\"max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4\">
-          <h1 className=\"text-3xl font-bold text-gray-900\">Newar Insights</h1>
-          <p className=\"text-gray-500 mt-1\">Admin Panel - Sistema de Gravação de Reuniões</p>
-        </div>
-      </header>
+      <div>
+        <h1 className="text-4xl font-bold tracking-tight">Dashboard</h1>
+        <p className="text-muted-foreground mt-2">
+          Visão geral do sistema de gravação de reuniões
+        </p>
+      </div>
 
-      <main className=\"max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8\">
-        {/* Health Status */}
-        <div className=\"grid grid-cols-1 md:grid-cols-3 gap-6 mb-8\">
-          <div className=\"bg-white rounded-lg shadow p-6\">
-            <h3 className=\"text-sm font-medium text-gray-500\">Total de Usuários</h3>
-            <p className=\"text-3xl font-bold text-gray-900 mt-2\">{users.length}</p>
-          </div>
+      {/* Metrics Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total de Usuários</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{users.length}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Usuários cadastrados no sistema
+            </p>
+          </CardContent>
+        </Card>
 
-          <div className=\"bg-white rounded-lg shadow p-6\">
-            <h3 className=\"text-sm font-medium text-gray-500\">Gravações Ativas</h3>
-            <p className=\"text-3xl font-bold text-green-600 mt-2\">{activeRecordings}</p>
-          </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Gravações Ativas</CardTitle>
+            <Activity className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{activeRecordings}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Bots gravando agora
+            </p>
+          </CardContent>
+        </Card>
 
-          <div className=\"bg-white rounded-lg shadow p-6\">
-            <h3 className=\"text-sm font-medium text-gray-500\">Status do Sistema</h3>
-            <div className=\"flex items-center gap-2 mt-2\">
-              <div className={`w-3 h-3 rounded-full ${health.admin?.status === 'healthy' && health.gateway?.status === 'healthy' ? 'bg-green-500' : 'bg-red-500'}`} />
-              <span className=\"text-lg font-semibold\">{health.admin?.status === 'healthy' && health.gateway?.status === 'healthy' ? 'Online' : 'Offline'}</span>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Completas Hoje</CardTitle>
+            <CheckCircle className="h-4 w-4 text-blue-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">{completedToday}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Gravações finalizadas hoje
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Status do Sistema</CardTitle>
+            <Server className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-xl font-semibold">Online</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Todos os serviços operacionais
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Charts Row */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Status Distribution */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Distribuição de Status</CardTitle>
+            <CardDescription>Gravações por status atual</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={statusData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, value }) => `${name}: ${value}`}
+                  outerRadius={100}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {statusData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Activity Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Atividade dos Últimos 7 Dias</CardTitle>
+            <CardDescription>Gravações criadas por dia</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={activityData}>
+                <XAxis dataKey="date" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Line type="monotone" dataKey="total" stroke="#3b82f6" name="Total" strokeWidth={2} />
+                <Line type="monotone" dataKey="completed" stroke="#10b981" name="Completas" strokeWidth={2} />
+                <Line type="monotone" dataKey="failed" stroke="#ef4444" name="Falhadas" strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Activity & Quick Actions */}
+      <div className="grid gap-4 md:grid-cols-3">
+        {/* Recent Activity */}
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle>Atividade Recente</CardTitle>
+            <CardDescription>Últimas gravações solicitadas</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {recentActivity.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  Nenhuma atividade recente
+                </div>
+              ) : (
+                recentActivity.map((meeting) => (
+                  <div key={meeting.id} className="flex items-center justify-between border-b pb-3 last:border-0 last:pb-0">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full ${
+                        meeting.status === 'completed' ? 'bg-green-500' :
+                        meeting.status === 'failed' ? 'bg-red-500' :
+                        meeting.status === 'active' || meeting.status === 'recording' ? 'bg-blue-500 animate-pulse' :
+                        'bg-yellow-500'
+                      }`} />
+                      <div>
+                        <p className="text-sm font-medium">{meeting.meeting_id}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {meeting.platform === 'google_meet' ? 'Google Meet' : 'Teams'} • {formatDate(meeting.created_at)}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge variant={
+                      meeting.status === 'completed' ? 'default' :
+                      meeting.status === 'failed' ? 'destructive' :
+                      meeting.status === 'active' || meeting.status === 'recording' ? 'default' :
+                      'secondary'
+                    }>
+                      {meeting.status}
+                    </Badge>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Quick Actions */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Ações Rápidas</CardTitle>
+            <CardDescription>Acesso rápido às principais funções</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Button className="w-full justify-start" variant="outline" asChild>
+              <a href="/recordings">
+                <PlayCircle className="mr-2 h-4 w-4" />
+                Ver Gravações
+              </a>
+            </Button>
+            <Button className="w-full justify-start" variant="outline" asChild>
+              <a href="/bots">
+                <Activity className="mr-2 h-4 w-4" />
+                Bots Ativos
+              </a>
+            </Button>
+            <Button className="w-full justify-start" variant="outline" asChild>
+              <a href="/users">
+                <Users className="mr-2 h-4 w-4" />
+                Gerenciar Usuários
+              </a>
+            </Button>
+            <Button className="w-full justify-start" variant="outline" asChild>
+              <a href="/health">
+                <Server className="mr-2 h-4 w-4" />
+                Saúde do Sistema
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* System Stats */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Estatísticas do Sistema</CardTitle>
+          <CardDescription>Métricas gerais de uso</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-4">
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Total de Gravações</p>
+              <p className="text-2xl font-bold">{meetings.length}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Taxa de Sucesso</p>
+              <p className="text-2xl font-bold text-green-600">
+                {meetings.length > 0 ? Math.round((meetings.filter(m => m.status === 'completed').length / meetings.length) * 100) : 0}%
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Gravações Falhadas</p>
+              <p className="text-2xl font-bold text-red-600">{failedRecordings}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Média por Usuário</p>
+              <p className="text-2xl font-bold">
+                {users.length > 0 ? (meetings.length / users.length).toFixed(1) : 0}
+              </p>
             </div>
           </div>
-        </div>
-
-        {/* Create User Form */}
-        <div className=\"bg-white rounded-lg shadow p-6 mb-8\">
-          <h2 className=\"text-xl font-bold text-gray-900 mb-4\">Criar Novo Usuário</h2>
-          <form onSubmit={handleCreateUser} className=\"grid grid-cols-1 md:grid-cols-4 gap-4\">
-            <input
-              type=\"email\"
-              placeholder=\"Email\"
-              value={newUser.email}
-              onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-              className=\"border border-gray-300 rounded-lg px-4 py-2\"
-              required
-            />
-            <input
-              type=\"text\"
-              placeholder=\"Nome\"
-              value={newUser.name}
-              onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-              className=\"border border-gray-300 rounded-lg px-4 py-2\"
-              required
-            />
-            <input
-              type=\"number\"
-              placeholder=\"Max Bots\"
-              value={newUser.max_concurrent_bots}
-              onChange={(e) => setNewUser({ ...newUser, max_concurrent_bots: parseInt(e.target.value) })}
-              className=\"border border-gray-300 rounded-lg px-4 py-2\"
-              min={1}
-              max={50}
-              required
-            />
-            <button
-              type=\"submit\"
-              className=\"bg-blue-600 text-white rounded-lg px-6 py-2 hover:bg-blue-700 transition\"
-            >
-              Criar Usuário
-            </button>
-          </form>
-        </div>
-
-        {/* Token Display */}
-        {selectedToken && (
-          <div className=\"bg-green-50 border border-green-200 rounded-lg p-4 mb-8\">
-            <h3 className=\"font-semibold text-green-900 mb-2\">Token Gerado (copie agora!):</h3>
-            <div className=\"flex items-center gap-2\">
-              <code className=\"flex-1 bg-white px-4 py-2 rounded border border-green-300 text-sm font-mono\">
-                {selectedToken}
-              </code>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(selectedToken);
-                  alert('Token copiado!');
-                }}
-                className=\"bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700\"
-              >
-                Copiar
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Users Table */}
-        <div className=\"bg-white rounded-lg shadow overflow-hidden\">
-          <div className=\"px-6 py-4 border-b border-gray-200\">
-            <h2 className=\"text-xl font-bold text-gray-900\">Usuários</h2>
-          </div>
-          <div className=\"overflow-x-auto\">
-            <table className=\"min-w-full divide-y divide-gray-200\">
-              <thead className=\"bg-gray-50\">
-                <tr>
-                  <th className=\"px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase\">ID</th>
-                  <th className=\"px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Nome</th>
-                  <th className=\"px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Email</th>
-                  <th className=\"px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Max Bots</th>
-                  <th className=\"px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Criado em</th>
-                  <th className=\"px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Ações</th>
-                </tr>
-              </thead>
-              <tbody className=\"bg-white divide-y divide-gray-200\">
-                {users.map((user) => (
-                  <tr key={user.id} className=\"hover:bg-gray-50\">
-                    <td className=\"px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900\">{user.id}</td>
-                    <td className=\"px-6 py-4 whitespace-nowrap text-sm text-gray-900\">{user.name}</td>
-                    <td className=\"px-6 py-4 whitespace-nowrap text-sm text-gray-500\">{user.email}</td>
-                    <td className=\"px-6 py-4 whitespace-nowrap text-sm text-gray-500\">{user.max_concurrent_bots}</td>
-                    <td className=\"px-6 py-4 whitespace-nowrap text-sm text-gray-500\">{formatDate(user.created_at)}</td>
-                    <td className=\"px-6 py-4 whitespace-nowrap text-sm space-x-2\">
-                      <button
-                        onClick={() => handleGenerateToken(user.id)}
-                        className=\"bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-xs\"
-                      >
-                        Gerar Token
-                      </button>
-                      <button
-                        onClick={() => handleDeleteUser(user.id)}
-                        className=\"bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 text-xs\"
-                      >
-                        Deletar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Documentation Links */}
-        <div className=\"mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6\">
-          <h3 className=\"font-semibold text-blue-900 mb-3\">📚 Documentação</h3>
-          <ul className=\"space-y-2 text-blue-800\">
-            <li>• <strong>FINAL_SUMMARY.md</strong> - Documentação completa do sistema</li>
-            <li>• <strong>CLAUDE.md</strong> - Especificações técnicas e arquitetura</li>
-            <li>• <strong>AUDIO_CAPTURE_ISSUE.md</strong> - Solução para captura de áudio</li>
-            <li>• Para testar gravações: use o token gerado com a API (porta 8080)</li>
-          </ul>
-        </div>
-      </main>
+        </CardContent>
+      </Card>
     </div>
   );
 }
