@@ -1,0 +1,70 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+
+# Go
+/services/*/services
+/services/api-gateway/api-gateway
+/services/admin-api/admin-api
+/services/bot-manager/bot-manager
+vendor/
+*.out
+go.work
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+dist/
+build/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+/storage/database/*.db
+
+# Storage
+/storage/recordings/temp/*
+/storage/recordings/final/*
+!storage/recordings/temp/.gitkeep
+!storage/recordings/final/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Docker
+.dockerignore
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+coverage/
+*.coverprofile
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS
+Thumbs.db
