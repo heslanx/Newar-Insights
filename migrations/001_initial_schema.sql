@@ -45,8 +45,8 @@ CREATE TABLE IF NOT EXISTS meetings (
     error_message TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    UNIQUE(platform, meeting_id, user_id)
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    -- UNIQUE(platform, meeting_id, user_id) -- Temporarily disabled for debugging
 );
 
 -- =====================================================

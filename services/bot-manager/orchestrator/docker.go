@@ -76,8 +76,9 @@ func (o *DockerOrchestrator) SpawnBot(ctx context.Context, req types.SpawnBotReq
 		AutoRemove: false, // We'll remove manually after finalization
 		Resources: container.Resources{
 			Memory:   constants.BotMemoryLimit,
-			NanoCPUs: constants.BotCPUQuota * 10, // Convert to NanoCPUs
+			NanoCPUs: 1e9, // 1 CPU = 1,000,000,000 NanoCPUs
 		},
+		NetworkMode: container.NetworkMode(constants.BotNetworkName),
 	}
 
 	// Create container

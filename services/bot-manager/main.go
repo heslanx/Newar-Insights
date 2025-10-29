@@ -14,6 +14,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"github.com/newar/insights/services/bot-manager/finalizer"
 	"github.com/newar/insights/services/bot-manager/handlers"
 	"github.com/newar/insights/services/bot-manager/orchestrator"
 	"github.com/newar/insights/shared/database"
@@ -59,10 +60,10 @@ func main() {
 	meetingRepo := database.NewMeetingRepository(db)
 
 	// Initialize finalizer
-	finalizer := orchestrator.NewFinalizer(cfg.StoragePath)
+	fin := finalizer.NewFinalizer(cfg.StoragePath)
 
 	// Initialize status listener
-	statusListener := orchestrator.NewStatusListener(redisClient, meetingRepo, finalizer)
+	statusListener := orchestrator.NewStatusListener(redisClient, meetingRepo, fin)
 
 	// Initialize handlers
 	botHandler := handlers.NewBotHandler(dockerOrch, statusListener, meetingRepo)

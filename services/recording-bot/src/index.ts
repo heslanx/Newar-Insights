@@ -1,4 +1,6 @@
-import { chromium, Browser, Page } from 'playwright';
+import { chromium as playwrightChromium } from 'playwright-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import { Browser, Page } from 'playwright';
 import { loadConfig } from './config';
 import { RedisClient } from './redis-client';
 import { ChunkUploader } from './uploader';
@@ -38,24 +40,46 @@ async function main() {
     // Publish joining status
     await redisClient.publishStatus('joining');
 
-    // Launch browser
-    console.log('🌐 Launching Chromium browser...');
-    browser = await chromium.launch({
-      headless: true,
+    // Launch browser with stealth plugin (like Vexa Clean)
+    console.log('🌐 Launching Chromium browser with stealth...');
+    
+    // Configure stealth plugin
+    const stealthPlugin = StealthPlugin();
+    stealthPlugin.enabledEvasions.delete("iframe.contentWindow");
+    stealthPlugin.enabledEvasions.delete("media.codecs");
+    playwrightChromium.use(stealthPlugin);
+    
+    browser = await playwrightChromium.launch({
+      headless: false, // CRITICAL: Vexa uses headless:false for Google Meet
       args: [
+        '--incognito',
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
+        '--disable-features=IsolateOrigins,site-per-process',
+        '--disable-infobars',
+        '--disable-gpu',
+        '--use-fake-ui-for-media-stream',
+        '--use-file-for-fake-video-capture=/dev/null',
+        '--use-file-for-fake-audio-capture=/dev/null',
+        '--allow-running-insecure-content',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor',
+        '--ignore-certificate-errors',
+        '--ignore-ssl-errors',
+        '--ignore-certificate-errors-spki-list',
+        '--disable-site-isolation-trials',
         '--disable-blink-features=AutomationControlled',
-        '--use-fake-ui-for-media-stream', // Auto-approve media permissions
-        '--use-fake-device-for-media-stream',
       ],
     });
 
-    page = await browser.newPage({
+    const context = await browser.newContext({
       viewport: { width: 1280, height: 720 },
       permissions: ['microphone', 'camera'],
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
     });
+    
+    page = await context.newPage();
 
     console.log('✅ Browser launched');
 

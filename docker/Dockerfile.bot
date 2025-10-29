@@ -3,9 +3,14 @@
 # Uses official Playwright image
 # ==========================================
 
-FROM mcr.microsoft.com/playwright:v1.40.0-jammy
+FROM mcr.microsoft.com/playwright:v1.56.1-jammy
 
 WORKDIR /app
+
+# Install Xvfb for headless:false browser support (like Vexa Clean)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    xvfb \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js dependencies
 COPY services/recording-bot/package*.json ./
@@ -20,12 +25,17 @@ RUN npm install -g esbuild && \
     npm run build && \
     npm uninstall -g esbuild
 
-# Create storage directory
-RUN mkdir -p /app/storage/recordings/temp
+# Create storage directories
+RUN mkdir -p /app/storage/recordings/temp /app/storage/screenshots
+
+# Copy and configure entrypoint script
+COPY services/recording-bot/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 # Set environment variables (will be overridden at runtime)
 ENV NODE_ENV=production
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+ENV DISPLAY=:99
 
-# Run the bot
-CMD ["node", "dist/index.js"]
+# Run the bot via entrypoint (starts Xvfb first)
+CMD ["/app/entrypoint.sh"]

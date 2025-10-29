@@ -2,7 +2,7 @@
 
 **Production-ready meeting recording system with browser automation**
 
-Record Google Meet and Microsoft Teams meetings via simple REST API. Built with Go microservices, Redis pub/sub, Playwright browser automation, and Docker.
+Record Google Meet meetings via simple REST API. Built with Go microservices, Redis pub/sub, Playwright browser automation, and Docker.
 
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/newar/insights)
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go)](https://go.dev)

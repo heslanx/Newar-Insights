@@ -19,36 +19,81 @@ export class AudioRecorder {
   async startRecording(): Promise<void> {
     console.log('🎙️  Starting audio recording...');
 
-    // Inject recording script into the page
+    // Inject recording script using Vexa Clean's approach
     await this.page.evaluate(
       ({ chunkDurationMs, bitrate }) => {
-        return new Promise<void>((resolve, reject) => {
-          // Get all audio streams from the page
-          const audioContext = new AudioContext();
-          const audioStreams: MediaStream[] = [];
+        return new Promise<void>(async (resolve, reject) => {
+          try {
+            console.log('[Browser] Finding media elements with audio...');
 
-          // Try to capture audio from the meeting
-          // This is a simplified version - actual implementation needs platform-specific logic
-          navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-            const mediaRecorder = new MediaRecorder(stream, {
+            // Find active media elements (Vexa Clean approach)
+            const findMediaElements = async (retries = 10, delay = 1000): Promise<HTMLMediaElement[]> => {
+              for (let i = 0; i < retries; i++) {
+                const mediaElements = Array.from(
+                  document.querySelectorAll("audio, video")
+                ).filter((el: any) =>
+                  !el.paused &&
+                  el.srcObject instanceof MediaStream &&
+                  el.srcObject.getAudioTracks().length > 0
+                ) as HTMLMediaElement[];
+
+                if (mediaElements.length > 0) {
+                  console.log(`[Browser] Found ${mediaElements.length} active media elements`);
+                  return mediaElements;
+                }
+
+                console.log(`[Browser] No media elements found, retry ${i + 1}/${retries}...`);
+                await new Promise(r => setTimeout(r, delay));
+              }
+              return [];
+            };
+
+            const mediaElements = await findMediaElements();
+
+            if (mediaElements.length === 0) {
+              throw new Error('No media elements found with audio');
+            }
+
+            // Create combined audio stream (Vexa Clean approach)
+            const audioContext = new AudioContext({ sampleRate: 48000 });
+            const destination = audioContext.createMediaStreamDestination();
+
+            mediaElements.forEach((element: any, index: number) => {
+              try {
+                const elementStream = element.srcObject ||
+                  (element.captureStream && element.captureStream()) ||
+                  (element.mozCaptureStream && element.mozCaptureStream());
+
+                if (elementStream instanceof MediaStream && elementStream.getAudioTracks().length > 0) {
+                  const source = audioContext.createMediaStreamSource(elementStream);
+                  source.connect(destination);
+                  console.log(`[Browser] Connected audio stream ${index + 1}`);
+                }
+              } catch (error: any) {
+                console.error(`[Browser] Failed to connect stream ${index}:`, error.message);
+              }
+            });
+
+            const combinedStream = destination.stream;
+
+            // Initialize MediaRecorder
+            const mediaRecorder = new MediaRecorder(combinedStream, {
               mimeType: 'audio/webm;codecs=opus',
               audioBitsPerSecond: bitrate,
             });
 
-            const chunks: Blob[] = [];
-
             mediaRecorder.ondataavailable = (event) => {
               if (event.data.size > 0) {
-                chunks.push(event.data);
-
-                // Send chunk to parent context (we'll handle this differently in real implementation)
                 const reader = new FileReader();
                 reader.onloadend = () => {
-                  // Store in window object to be retrieved by Playwright
                   if (!window.__recordingChunks) {
                     window.__recordingChunks = [];
                   }
-                  window.__recordingChunks.push(reader.result);
+                  // Convert ArrayBuffer to base64 string for Playwright serialization
+                  const base64 = btoa(
+                    String.fromCharCode(...new Uint8Array(reader.result as ArrayBuffer))
+                  );
+                  window.__recordingChunks.push(base64);
                 };
                 reader.readAsArrayBuffer(event.data);
               }
@@ -60,13 +105,13 @@ export class AudioRecorder {
             };
 
             mediaRecorder.start(chunkDurationMs);
-
-            // Store recorder in window for later access
             window.__mediaRecorder = mediaRecorder;
 
-            console.log('✅ MediaRecorder started');
+            console.log('✅ MediaRecorder started with combined stream');
             resolve();
-          }).catch(reject);
+          } catch (error) {
+            reject(error);
+          }
         });
       },
       {
@@ -94,9 +139,9 @@ export class AudioRecorder {
         return chunks;
       });
 
-      // Upload each chunk
+      // Upload each chunk (convert from base64)
       for (const chunkData of chunks) {
-        const buffer = Buffer.from(chunkData as ArrayBuffer);
+        const buffer = Buffer.from(chunkData as string, 'base64');
         await this.uploader.uploadChunk(buffer, this.chunkIndex);
         this.chunkIndex++;
       }
@@ -127,7 +172,7 @@ export class AudioRecorder {
     });
 
     for (const chunkData of chunks) {
-      const buffer = Buffer.from(chunkData as ArrayBuffer);
+      const buffer = Buffer.from(chunkData as string, 'base64');
       await this.uploader.uploadChunk(buffer, this.chunkIndex);
       this.chunkIndex++;
     }
@@ -145,6 +190,6 @@ export class AudioRecorder {
 declare global {
   interface Window {
     __mediaRecorder?: MediaRecorder;
-    __recordingChunks?: ArrayBuffer[];
+    __recordingChunks?: string[]; // base64 encoded chunks
   }
 }

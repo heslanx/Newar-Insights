@@ -1,4 +1,4 @@
-package orchestrator
+package finalizer
 
 import (
 	"context"

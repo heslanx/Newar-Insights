@@ -17,7 +17,6 @@ import (
 
 	"github.com/newar/insights/services/api-gateway/handlers"
 	"github.com/newar/insights/services/api-gateway/middleware"
-	"github.com/newar/insights/shared/constants"
 	"github.com/newar/insights/shared/database"
 	"github.com/newar/insights/shared/redis"
 )

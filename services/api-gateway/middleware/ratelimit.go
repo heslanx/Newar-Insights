@@ -8,7 +8,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog/log"
 
-	"github.com/newar/insights/shared/constants"
 	"github.com/newar/insights/shared/redis"
 )
 

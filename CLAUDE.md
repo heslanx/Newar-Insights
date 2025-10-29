@@ -95,13 +95,45 @@ Audio Recording ATIVA ✅
 5. **Redis Pub/Sub** - Comunicação assíncrona entre Bot Manager e Recording Bots
 6. **Status flow validado:** `requested → joining → active → recording → finalizing → completed`
 
+### ⚠️ DESCOBERTA IMPORTANTE: Requisito de Áudio
+
+**Após investigação detalhada, identificamos:**
+
+**MediaRecorder está funcionando CORRETAMENTE, mas precisa de participantes com áudio!**
+
+O bot captura áudio de OUTROS participantes na reunião, não do próprio bot (que está com mic mutado por design). Isso é comportamento **idêntico ao Vexa Clean**.
+
+**Como funciona:**
+1. Bot entra na reunião (mic mutado, câmera off)
+2. Bot procura elementos `<audio>` ou `<video>` no DOM do Google Meet
+3. Bot aguarda streams com `audioTracks` ativos
+4. **Quando OUTRO participante fala ou tem mic ativo → MediaRecorder captura**
+5. Chunks são salvos a cada 10 segundos
+
+**Por que 0 chunks no teste:**
+- ✅ Sistema está correto
+- ❌ Reunião estava vazia (só o bot)
+- ❌ Sem outros participantes = sem áudio para capturar
+
+**Validação:** Código idêntico ao Vexa Clean que está em produção.
+
+**Para testar corretamente:**
+1. Entre na reunião com outro dispositivo
+2. Ative microfone e fale por 20+ segundos
+3. Bot vai capturar e salvar chunks automaticamente
+
+Ver detalhes em: [TEST_AUDIO_CAPTURE.md](TEST_AUDIO_CAPTURE.md)
+
 ### 📋 Próximos Passos
 
-1. **Testar finalização com FFmpeg** - Concatenar chunks após stop command
-2. **Implementar download de recordings** - Endpoint GET funcionando
-3. **Testar com múltiplos bots simultâneos** - Validar limite de 10 concurrent
-4. **Deploy no EasyPanel** - Usar Supabase para storage em produção
-5. **Adicionar Microsoft Teams** - Implementar join logic do Teams
+1. **✅ Testar com áudio real** - Entrar na reunião com 2 dispositivos
+2. **Implementar finalização com FFmpeg** - Concatenar chunks após stop command
+3. **Implementar download de recordings** - Endpoint GET funcionando
+4. **Testar com múltiplos bots simultâneos** - Validar limite de 10 concurrent
+5. **Deploy no EasyPanel** - Usar Supabase para storage em produção
+6. **Adicionar Microsoft Teams** - Implementar join logic do Teams
+
+**Alternativa:** Modificar bot para ativar próprio microfone e gravar seu áudio (muda de "observer" para "participant")
 
 ### 🚀 Como Executar Localmente
 

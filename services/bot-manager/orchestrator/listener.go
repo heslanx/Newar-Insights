@@ -6,6 +6,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/newar/insights/services/bot-manager/finalizer"
 	"github.com/newar/insights/shared/database"
 	"github.com/newar/insights/shared/redis"
 	"github.com/newar/insights/shared/types"
@@ -15,15 +16,15 @@ import (
 type StatusListener struct {
 	redisClient *redis.Client
 	meetingRepo *database.MeetingRepository
-	finalizer   *Finalizer
+	finalizer   *finalizer.Finalizer
 }
 
 // NewStatusListener creates a new status listener
-func NewStatusListener(redisClient *redis.Client, meetingRepo *database.MeetingRepository, finalizer *Finalizer) *StatusListener {
+func NewStatusListener(redisClient *redis.Client, meetingRepo *database.MeetingRepository, fin *finalizer.Finalizer) *StatusListener {
 	return &StatusListener{
 		redisClient: redisClient,
 		meetingRepo: meetingRepo,
-		finalizer:   finalizer,
+		finalizer:   fin,
 	}
 }
 
