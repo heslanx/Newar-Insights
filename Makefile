@@ -83,6 +83,15 @@ health: ## Check health of all services
 dev: build start init ## Full dev setup (build + start + init)
 	@echo "✅ Development environment ready!"
 
+frontend: ## Start frontend development server
+	@echo "🚀 Starting frontend on http://localhost:3000..."
+	cd frontend && npm run dev
+
+all: start frontend ## Start all services (backend + frontend)
+	@echo "✅ All services running!"
+	@echo "  - Backend APIs: http://localhost:8080, http://localhost:8081, http://localhost:8082"
+	@echo "  - Frontend: http://localhost:3000"
+
 ps: ## Show running containers
 	docker-compose ps
 
