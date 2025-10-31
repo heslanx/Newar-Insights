@@ -1,0 +1,125 @@
+# 🔑 API Keys de Exemplo - Newar Insights
+
+## ⚠️ IMPORTANTE
+Este arquivo contém API Keys de EXEMPLO para desenvolvimento.
+**NUNCA commite API Keys reais no Git!**
+
+## 📋 API Keys Geradas
+
+### Para Desenvolvimento Local
+```
+newar_u0X3EcL1kGTt7WcJ5fl81X7Rtuy3vs-d
+```
+
+### Para Testes
+```
+newar_7mCp37d8PYHr4Wfj3XnIMXitTW96EkLY
+newar_UUOXMrSt8RDZVrbvwl4sxf3zpfsaWaxb
+newar_e-BnaFGSrXV5iRoD_wAMsNxdmOiI_vUe
+newar_vi3lWgpMhL0WwsDGoXhU50b-cX5-08FK
+```
+
+## 🚀 Como Usar
+
+### 1. Na Extensão
+1. Abra a extensão
+2. Clique em "Começar"
+3. Escolha "Tenho uma API Key"
+4. Cole uma das chaves acima
+5. Clique em "Conectar"
+
+### 2. Via API (curl)
+```bash
+curl http://localhost:8080/recordings \
+  -H "X-API-Key: newar_u0X3EcL1kGTt7WcJ5fl81X7Rtuy3vs-d" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "google_meet",
+    "meeting_id": "abc-defg-hij",
+    "bot_name": "Meu Bot"
+  }'
+```
+
+### 3. Via JavaScript
+```javascript
+const apiKey = 'newar_u0X3EcL1kGTt7WcJ5fl81X7Rtuy3vs-d';
+
+const response = await fetch('http://localhost:8080/recordings', {
+  method: 'POST',
+  headers: {
+    'X-API-Key': apiKey,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    platform: 'google_meet',
+    meeting_id: 'abc-defg-hij',
+    bot_name: 'Meu Bot',
+  }),
+});
+```
+
+## 🔧 Gerar Novas Keys
+
+```bash
+# Gerar 1 key
+node utils/generate-api-key.js
+
+# Gerar múltiplas keys
+node utils/generate-api-key.js 5
+```
+
+## 📊 Formato da API Key
+
+```
+newar_[32 caracteres aleatórios]
+```
+
+- **Prefixo:** `newar_`
+- **Comprimento total:** 38 caracteres
+- **Entropia:** 192 bits
+- **Caracteres:** Base64URL (a-z, A-Z, 0-9, -, _)
+
+## 🔒 Segurança
+
+### ✅ Boas Práticas
+- Nunca commite API Keys reais
+- Use variáveis de ambiente em produção
+- Rotacione keys periodicamente
+- Revogue keys comprometidas
+- Use HTTPS em produção
+
+### ❌ Não Fazer
+- Não compartilhe keys publicamente
+- Não coloque keys em código frontend
+- Não use keys de desenvolvimento em produção
+- Não logue keys completas
+
+## 📝 Variáveis de Ambiente
+
+### .env.local
+```bash
+VITE_API_KEY=newar_u0X3EcL1kGTt7WcJ5fl81X7Rtuy3vs-d
+```
+
+### .env.production
+```bash
+VITE_API_KEY=newar_[sua-key-de-producao]
+```
+
+## 🧪 Para Testes
+
+### Jest
+```javascript
+process.env.VITE_API_KEY = 'newar_test_key_for_jest';
+```
+
+### Cypress
+```javascript
+Cypress.env('API_KEY', 'newar_test_key_for_cypress');
+```
+
+## 📚 Referências
+
+- [API Documentation](./API_REFERENCE.md)
+- [Security Best Practices](./BEST_PRACTICES.md)
+- [Environment Variables](./README.md#environment-variables)

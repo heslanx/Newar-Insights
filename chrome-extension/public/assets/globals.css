@@ -1,0 +1,125 @@
+@import "tailwindcss";
+
+@theme {
+  /* Newar Insights Brand Colors */
+  --color-gray-1: #090A0C;
+  --color-gray-2: #111111;
+  --color-gray-5: #1C1D21;
+  --color-gray-10: #2A2B2F;
+  --color-gray-20: #303236;
+  --color-gray-30: #45464A;
+  --color-gray-50: #818285;
+  --color-gray-60: #999A9C;
+  --color-gray-80: #CDCFD1;
+  --color-gray-90: #E4E5E7;
+  --color-gray-98: #F6F6F6;
+  
+  --color-brand-blue: #3d7eff;
+  --color-brand-orange: #F58041;
+  --color-brand-danger: #ff4d4d;
+  
+  /* Typography Sizes */
+  --font-size-84: 84px;
+  --font-size-80: 80px;
+  --font-size-36: 36px;
+  --font-size-32: 32px;
+  --font-size-28: 28px;
+  --font-size-24: 24px;
+  --font-size-18: 18px;
+  --font-size-15: 15px;
+  --font-size-14: 14px;
+  --font-size-12: 12px;
+  --font-size-11: 11px;
+}
+
+@layer base {
+  :root {
+    /* Newar Insights Light Theme */
+    --background: 0 0% 96.5%;
+    --foreground: 0 0% 0%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 0%;
+    --primary: 221 100% 62%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 96.5%;
+    --secondary-foreground: 0 0% 0%;
+    --muted: 0 0% 96.5%;
+    --muted-foreground: 0 0% 51%;
+    --accent: 18 91% 61%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 100% 65%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 89%;
+    --input: 0 0% 89%;
+    --ring: 221 100% 62%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* Newar Insights Dark Theme */
+    --background: 210 11% 4%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 11%;
+    --card-foreground: 0 0% 100%;
+    --popover: 0 0% 11%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 221 100% 62%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 18%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 18%;
+    --muted-foreground: 0 0% 90%;
+    --accent: 18 91% 61%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 100% 65%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 221 100% 62%;
+  }
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+}
+
+/* Glowing Button Animations */
+@keyframes border-glow {
+  0%, 100% { 
+    opacity: 0.3;
+  }
+  50% { 
+    opacity: 0.8;
+  }
+}
+
+@keyframes border-pulse {
+  0%, 100% { 
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% { 
+    opacity: 1;
+    transform: scale(1.02);
+  }
+}
+
+.border-button-light-blur {
+  background: radial-gradient(circle at center, rgba(255,170,129,0.3), transparent 70%);
+  animation: border-glow 2s ease-in-out infinite;
+  filter: blur(8px);
+}
+
+.border-button-light {
+  background: radial-gradient(circle at center, rgba(255,218,159,0.4), transparent 70%);
+  animation: border-pulse 2s ease-in-out infinite;
+  filter: blur(4px);
+}
