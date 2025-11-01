@@ -100,7 +100,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*types.U
 }
 
 // List retrieves paginated users
-func (r *UserRepository) List(ctx context.Context, limit, offset int) ([]types.User, int64, error) {
+func (r *UserRepository) List(ctx context.Context, limit, offset int) ([]*types.User, int64, error) {
 	// Get total count
 	var total int64
 	err := r.db.QueryRow(ctx, "SELECT COUNT(*) FROM users").Scan(&total)
@@ -122,7 +122,7 @@ func (r *UserRepository) List(ctx context.Context, limit, offset int) ([]types.U
 	}
 	defer rows.Close()
 
-	users := []types.User{}
+	users := []*types.User{}
 	for rows.Next() {
 		var user types.User
 		err := rows.Scan(
@@ -136,7 +136,7 @@ func (r *UserRepository) List(ctx context.Context, limit, offset int) ([]types.U
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to scan user: %w", err)
 		}
-		users = append(users, user)
+		users = append(users, &user)
 	}
 
 	return users, total, nil
@@ -219,6 +219,27 @@ func (r *TokenRepository) GetUserIDByToken(ctx context.Context, token string) (i
 	}
 
 	return userID, nil
+}
+
+// ValidateToken validates a token hash and returns the associated user
+func (r *TokenRepository) ValidateToken(ctx context.Context, tokenHash string) (*types.User, error) {
+	userID, err := r.GetUserIDByToken(ctx, tokenHash)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get user by ID
+	userRepo := NewUserRepository(r.db)
+	return userRepo.GetByID(ctx, userID)
+}
+
+// DeleteByUserID deletes all tokens for a user
+func (r *TokenRepository) DeleteByUserID(ctx context.Context, userID int64) error {
+	_, err := r.db.Exec(ctx, "DELETE FROM api_tokens WHERE user_id = ?", userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete tokens: %w", err)
+	}
+	return nil
 }
 
 // =====================================================

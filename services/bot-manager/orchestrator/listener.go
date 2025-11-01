@@ -77,9 +77,9 @@ func (l *StatusListener) handleStatusUpdate(status types.BotStatusUpdate) {
 		ctx,
 		status.MeetingID,
 		status.Status,
-		&status.ContainerID,
-		status.ErrorMessage,
 		recordingPath,
+		status.ErrorMessage,
+		nil, // recordingDuration - will be calculated from chunks later
 	)
 
 	if err != nil {

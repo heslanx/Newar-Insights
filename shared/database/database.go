@@ -30,12 +30,13 @@ type Database interface {
 
 // Config holds database configuration
 type Config struct {
-	SupabaseURL string // Supabase project URL
-	SupabaseKey string // Supabase API key (anon or service_role)
-	MaxOpenConns int
-	MaxIdleConns int
-	ConnMaxLife  time.Duration
-	ConnMaxIdle  time.Duration
+	SupabaseURL      string // Supabase project URL
+	SupabaseKey      string // Supabase API key (anon or service_role)
+	SupabasePassword string // PostgreSQL password
+	MaxOpenConns     int
+	MaxIdleConns     int
+	ConnMaxLife      time.Duration
+	ConnMaxIdle      time.Duration
 }
 
 // PostgresDB implements Database interface for Supabase PostgreSQL
@@ -64,12 +65,19 @@ func NewDatabase(cfg Config) (Database, error) {
 	}
 
 	// Supabase PostgreSQL connection string (via pooler)
-	// Note: Password needs to be provided separately (via SUPABASE_DB_PASSWORD env var)
-	// For now, using service_role key as authentication method
+	// Use actual PostgreSQL password (not JWT token)
+	password := cfg.SupabasePassword
+	if password == "" {
+		return nil, fmt.Errorf("SUPABASE_DB_PASSWORD is required")
+	}
+
+	// Use direct Supabase connection (requires IPv6 or external pooler)
+	// For now, we'll use the direct database connection
+	// Note: This requires IPv6 support in Docker or external proxy
 	connStr := fmt.Sprintf(
-		"host=db.%s.supabase.co port=5432 dbname=postgres user=postgres password=%s sslmode=require",
+		"host=db.%s.supabase.co port=5432 dbname=postgres user=postgres password=%s sslmode=require connect_timeout=10",
 		projectID,
-		cfg.SupabaseKey, // Using service_role key as password (Supabase allows this)
+		password,
 	)
 
 	// Open PostgreSQL connection
@@ -112,10 +120,10 @@ func NewDatabase(cfg Config) (Database, error) {
 	}
 
 	log.Info().
-		Str("host", fmt.Sprintf("db.%s.supabase.co", projectID)).
+		Str("host", fmt.Sprintf("db.%s.supabase.co:5432", projectID)).
 		Int("max_open_conns", maxOpenConns).
 		Int("max_idle_conns", maxIdleConns).
-		Msg("Connected to Supabase PostgreSQL")
+		Msg("Connected to Supabase PostgreSQL (IPv6)")
 
 	return &PostgresDB{db: db}, nil
 }

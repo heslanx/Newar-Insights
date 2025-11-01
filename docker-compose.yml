@@ -40,6 +40,7 @@ services:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_KEY}
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - SUPABASE_DB_PASSWORD=${SUPABASE_DB_PASSWORD}
       # Admin API
       - ADMIN_API_KEY=${ADMIN_API_KEY:-admin_secret_change_me}
       - ADMIN_API_PORT=8081
@@ -71,6 +72,7 @@ services:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_KEY}
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - SUPABASE_DB_PASSWORD=${SUPABASE_DB_PASSWORD}
       # Supabase Storage
       - SUPABASE_STORAGE_BUCKET=${SUPABASE_STORAGE_BUCKET}
       - SUPABASE_STORAGE_ENDPOINT=${SUPABASE_STORAGE_ENDPOINT}
@@ -114,6 +116,7 @@ services:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_KEY}
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - SUPABASE_DB_PASSWORD=${SUPABASE_DB_PASSWORD}
       # Supabase Storage
       - SUPABASE_STORAGE_BUCKET=${SUPABASE_STORAGE_BUCKET}
       - SUPABASE_STORAGE_ENDPOINT=${SUPABASE_STORAGE_ENDPOINT}
@@ -154,6 +157,12 @@ networks:
   newar-network:
     driver: bridge
     name: newar-network
+    enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+        - subnet: fd00::/80
 
 # ==========================================
 # NOTES:
