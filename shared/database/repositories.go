@@ -27,18 +27,40 @@ func NewUserRepository(db Database) *UserRepository {
 func (r *UserRepository) Create(ctx context.Context, req types.CreateUserRequest) (*types.User, error) {
 	query := `
 		INSERT INTO users (email, name, max_concurrent_bots, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id
 	`
 
 	now := time.Now()
-	result, err := r.db.Exec(ctx, query, req.Email, req.Name, req.MaxConcurrentBots, now, now)
+	var id int64
+	err := r.db.QueryRow(ctx, query, req.Email, req.Name, req.MaxConcurrentBots, now, now).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	id, err := result.LastInsertId()
+	return &types.User{
+		ID:                id,
+		Email:             req.Email,
+		Name:              req.Name,
+		MaxConcurrentBots: req.MaxConcurrentBots,
+		CreatedAt:         now,
+		UpdatedAt:         now,
+	}, nil
+}
+
+// CreateOld is the old SQLite version (deprecated)
+func (r *UserRepository) CreateOld(ctx context.Context, req types.CreateUserRequest) (*types.User, error) {
+	query := `
+		INSERT INTO users (email, name, max_concurrent_bots, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id
+	`
+
+	now := time.Now()
+	var id int64
+	err := r.db.QueryRow(ctx, query, req.Email, req.Name, req.MaxConcurrentBots, now, now).Scan(&id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user ID: %w", err)
+		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
 	return &types.User{
@@ -53,7 +75,7 @@ func (r *UserRepository) Create(ctx context.Context, req types.CreateUserRequest
 
 // GetByID retrieves a user by ID
 func (r *UserRepository) GetByID(ctx context.Context, id int64) (*types.User, error) {
-	query := `SELECT id, email, name, max_concurrent_bots, created_at, updated_at FROM users WHERE id = ?`
+	query := `SELECT id, email, name, max_concurrent_bots, created_at, updated_at FROM users WHERE id = $1`
 
 	var user types.User
 	err := r.db.QueryRow(ctx, query, id).Scan(
@@ -77,7 +99,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id int64) (*types.User, er
 
 // GetByEmail retrieves a user by email
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*types.User, error) {
-	query := `SELECT id, email, name, max_concurrent_bots, created_at, updated_at FROM users WHERE email = ?`
+	query := `SELECT id, email, name, max_concurrent_bots, created_at, updated_at FROM users WHERE email = $1`
 
 	var user types.User
 	err := r.db.QueryRow(ctx, query, email).Scan(
@@ -113,7 +135,7 @@ func (r *UserRepository) List(ctx context.Context, limit, offset int) ([]*types.
 		SELECT id, email, name, max_concurrent_bots, created_at, updated_at
 		FROM users
 		ORDER BY created_at DESC
-		LIMIT ? OFFSET ?
+		LIMIT $1 OFFSET $2
 	`
 
 	rows, err := r.db.Query(ctx, query, limit, offset)
@@ -144,7 +166,7 @@ func (r *UserRepository) List(ctx context.Context, limit, offset int) ([]*types.
 
 // Delete deletes a user by ID
 func (r *UserRepository) Delete(ctx context.Context, id int64) error {
-	result, err := r.db.Exec(ctx, "DELETE FROM users WHERE id = ?", id)
+	result, err := r.db.Exec(ctx, "DELETE FROM users WHERE id = $1", id)
 	if err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
@@ -184,16 +206,12 @@ func (r *TokenRepository) Create(ctx context.Context, userID int64, token string
 	tokenHash := HashToken(token)
 	now := time.Now()
 
-	query := `INSERT INTO api_tokens (user_id, token_hash, created_at) VALUES (?, ?, ?)`
+	query := `INSERT INTO api_tokens (user_id, token_hash, created_at) VALUES ($1, $2, $3) RETURNING id`
 
-	result, err := r.db.Exec(ctx, query, userID, tokenHash, now)
+	var id int64
+	err := r.db.QueryRow(ctx, query, userID, tokenHash, now).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create token: %w", err)
-	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get token ID: %w", err)
 	}
 
 	return &types.APIToken{
@@ -209,7 +227,7 @@ func (r *TokenRepository) GetUserIDByToken(ctx context.Context, token string) (i
 	tokenHash := HashToken(token)
 
 	var userID int64
-	err := r.db.QueryRow(ctx, "SELECT user_id FROM api_tokens WHERE token_hash = ?", tokenHash).Scan(&userID)
+	err := r.db.QueryRow(ctx, "SELECT user_id FROM api_tokens WHERE token_hash = $1", tokenHash).Scan(&userID)
 
 	if err == sql.ErrNoRows {
 		return 0, fmt.Errorf("invalid token")
@@ -235,7 +253,7 @@ func (r *TokenRepository) ValidateToken(ctx context.Context, tokenHash string) (
 
 // DeleteByUserID deletes all tokens for a user
 func (r *TokenRepository) DeleteByUserID(ctx context.Context, userID int64) error {
-	_, err := r.db.Exec(ctx, "DELETE FROM api_tokens WHERE user_id = ?", userID)
+	_, err := r.db.Exec(ctx, "DELETE FROM api_tokens WHERE user_id = $1", userID)
 	if err != nil {
 		return fmt.Errorf("failed to delete tokens: %w", err)
 	}
@@ -259,17 +277,14 @@ func (r *MeetingRepository) Create(ctx context.Context, userID int64, req types.
 	now := time.Now()
 	query := `
 		INSERT INTO meetings (user_id, platform, meeting_id, meeting_url, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING id
 	`
 
-	result, err := r.db.Exec(ctx, query, userID, req.Platform, req.MeetingID, meetingURL, types.StatusRequested, now, now)
+	var id int64
+	err := r.db.QueryRow(ctx, query, userID, req.Platform, req.MeetingID, meetingURL, types.StatusRequested, now, now).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create meeting: %w", err)
-	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get meeting ID: %w", err)
 	}
 
 	return &types.Meeting{
@@ -289,7 +304,7 @@ func (r *MeetingRepository) GetByID(ctx context.Context, id int64) (*types.Meeti
 	query := `
 		SELECT id, user_id, platform, meeting_id, bot_container_id, status, meeting_url,
 		       recording_path, started_at, completed_at, error_message, created_at, updated_at
-		FROM meetings WHERE id = ?
+		FROM meetings WHERE id = $1
 	`
 
 	var meeting types.Meeting
@@ -327,30 +342,37 @@ func (r *MeetingRepository) Get(ctx context.Context, filter types.MeetingFilter)
 		FROM meetings WHERE 1=1
 	`
 	args := []interface{}{}
+	paramIndex := 1
 
 	if filter.UserID != nil {
-		query += " AND user_id = ?"
+		query += fmt.Sprintf(" AND user_id = $%d", paramIndex)
 		args = append(args, *filter.UserID)
+		paramIndex++
 	}
 	if filter.Platform != nil {
-		query += " AND platform = ?"
+		query += fmt.Sprintf(" AND platform = $%d", paramIndex)
 		args = append(args, *filter.Platform)
+		paramIndex++
 	}
 	if filter.MeetingID != nil {
-		query += " AND meeting_id = ?"
+		query += fmt.Sprintf(" AND meeting_id = $%d", paramIndex)
 		args = append(args, *filter.MeetingID)
+		paramIndex++
 	}
 	if filter.Status != nil {
-		query += " AND status = ?"
+		query += fmt.Sprintf(" AND status = $%d", paramIndex)
 		args = append(args, *filter.Status)
+		paramIndex++
 	}
 	if filter.BotContainerID != nil {
-		query += " AND bot_container_id = ?"
+		query += fmt.Sprintf(" AND bot_container_id = $%d", paramIndex)
 		args = append(args, *filter.BotContainerID)
+		paramIndex++
 	}
 	if filter.RecordingSessionID != nil {
-		query += " AND recording_session_id = ?"
+		query += fmt.Sprintf(" AND recording_session_id = $%d", paramIndex)
 		args = append(args, *filter.RecordingSessionID)
+		paramIndex++
 	}
 
 	query += " LIMIT 1"
@@ -388,7 +410,7 @@ func (r *MeetingRepository) GetByPlatformAndMeetingID(ctx context.Context, userI
 	query := `
 		SELECT id, user_id, platform, meeting_id, bot_container_id, status, meeting_url,
 		       recording_path, started_at, completed_at, error_message, created_at, updated_at
-		FROM meetings WHERE user_id = ? AND platform = ? AND meeting_id = ?
+		FROM meetings WHERE user_id = $1 AND platform = $2 AND meeting_id = $3
 	`
 
 	var meeting types.Meeting
@@ -422,9 +444,9 @@ func (r *MeetingRepository) GetByPlatformAndMeetingID(ctx context.Context, userI
 func (r *MeetingRepository) UpdateStatus(ctx context.Context, id int64, status types.MeetingStatus, recordingPath *string, errorMsg *string, recordingDuration *int) error {
 	query := `
 		UPDATE meetings
-		SET status = ?, recording_path = COALESCE(?, recording_path),
-		    error_message = ?, recording_duration = COALESCE(?, recording_duration), updated_at = ?
-		WHERE id = ?
+		SET status = $1, recording_path = COALESCE($2, recording_path),
+		    error_message = $3, recording_duration = COALESCE($4, recording_duration), updated_at = $5
+		WHERE id = $6
 	`
 
 	// Set started_at when status changes to active
@@ -432,8 +454,8 @@ func (r *MeetingRepository) UpdateStatus(ctx context.Context, id int64, status t
 		now := time.Now()
 		query = `
 			UPDATE meetings
-			SET status = ?, started_at = ?, updated_at = ?
-			WHERE id = ?
+			SET status = $1, started_at = $2, updated_at = $3
+			WHERE id = $4
 		`
 		_, err := r.db.Exec(ctx, query, status, now, now, id)
 		return err
@@ -444,9 +466,9 @@ func (r *MeetingRepository) UpdateStatus(ctx context.Context, id int64, status t
 		now := time.Now()
 		query = `
 			UPDATE meetings
-			SET status = ?, error_message = ?, recording_path = COALESCE(?, recording_path),
-			    recording_duration = COALESCE(?, recording_duration), completed_at = ?, updated_at = ?
-			WHERE id = ?
+			SET status = $1, error_message = $2, recording_path = COALESCE($3, recording_path),
+			    recording_duration = COALESCE($4, recording_duration), completed_at = $5, updated_at = $6
+			WHERE id = $7
 		`
 		_, err := r.db.Exec(ctx, query, status, errorMsg, recordingPath, recordingDuration, now, now, id)
 		return err
@@ -460,7 +482,7 @@ func (r *MeetingRepository) UpdateStatus(ctx context.Context, id int64, status t
 func (r *MeetingRepository) List(ctx context.Context, userID int64, limit, offset int) ([]types.Meeting, int64, error) {
 	// Get total count
 	var total int64
-	err := r.db.QueryRow(ctx, "SELECT COUNT(*) FROM meetings WHERE user_id = ?", userID).Scan(&total)
+	err := r.db.QueryRow(ctx, "SELECT COUNT(*) FROM meetings WHERE user_id = $1", userID).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count meetings: %w", err)
 	}
@@ -470,9 +492,9 @@ func (r *MeetingRepository) List(ctx context.Context, userID int64, limit, offse
 		SELECT id, user_id, platform, meeting_id, bot_container_id, status, meeting_url,
 		       recording_path, started_at, completed_at, error_message, created_at, updated_at
 		FROM meetings
-		WHERE user_id = ?
+		WHERE user_id = $1
 		ORDER BY created_at DESC
-		LIMIT ? OFFSET ?
+		LIMIT $2 OFFSET $3
 	`
 
 	rows, err := r.db.Query(ctx, query, userID, limit, offset)
@@ -513,7 +535,7 @@ func (r *MeetingRepository) CountActiveByUser(ctx context.Context, userID int64)
 	var count int
 	err := r.db.QueryRow(ctx, `
 		SELECT COUNT(*) FROM meetings
-		WHERE user_id = ? AND status IN (?, ?, ?)
+		WHERE user_id = $1 AND status IN ($2, $3, $4)
 	`, userID, types.StatusRequested, types.StatusJoining, types.StatusActive).Scan(&count)
 
 	if err != nil {
@@ -525,64 +547,78 @@ func (r *MeetingRepository) CountActiveByUser(ctx context.Context, userID int64)
 
 // Update updates a meeting with flexible filter and update params
 func (r *MeetingRepository) Update(ctx context.Context, filter types.MeetingFilter, update types.MeetingUpdate) error {
-	query := "UPDATE meetings SET updated_at = ?"
+	query := "UPDATE meetings SET updated_at = $1"
 	args := []interface{}{time.Now()}
+	paramIndex := 2
 
 	// Build SET clause
 	if update.Status != nil {
-		query += ", status = ?"
+		query += fmt.Sprintf(", status = $%d", paramIndex)
 		args = append(args, *update.Status)
+		paramIndex++
 	}
 	if update.BotContainerID != nil {
-		query += ", bot_container_id = ?"
+		query += fmt.Sprintf(", bot_container_id = $%d", paramIndex)
 		args = append(args, *update.BotContainerID)
+		paramIndex++
 	}
 	if update.RecordingPath != nil {
-		query += ", recording_path = ?"
+		query += fmt.Sprintf(", recording_path = $%d", paramIndex)
 		args = append(args, *update.RecordingPath)
+		paramIndex++
 	}
 	if update.RecordingDuration != nil {
-		query += ", recording_duration = ?"
+		query += fmt.Sprintf(", recording_duration = $%d", paramIndex)
 		args = append(args, *update.RecordingDuration)
+		paramIndex++
 	}
 	if update.ErrorMessage != nil {
-		query += ", error_message = ?"
+		query += fmt.Sprintf(", error_message = $%d", paramIndex)
 		args = append(args, *update.ErrorMessage)
+		paramIndex++
 	}
 	if update.StartedAt != nil {
-		query += ", started_at = ?"
+		query += fmt.Sprintf(", started_at = $%d", paramIndex)
 		args = append(args, *update.StartedAt)
+		paramIndex++
 	}
 	if update.CompletedAt != nil {
-		query += ", completed_at = ?"
+		query += fmt.Sprintf(", completed_at = $%d", paramIndex)
 		args = append(args, *update.CompletedAt)
+		paramIndex++
 	}
 
 	// Build WHERE clause
 	query += " WHERE 1=1"
 	if filter.UserID != nil {
-		query += " AND user_id = ?"
+		query += fmt.Sprintf(" AND user_id = $%d", paramIndex)
 		args = append(args, *filter.UserID)
+		paramIndex++
 	}
 	if filter.Platform != nil {
-		query += " AND platform = ?"
+		query += fmt.Sprintf(" AND platform = $%d", paramIndex)
 		args = append(args, *filter.Platform)
+		paramIndex++
 	}
 	if filter.MeetingID != nil {
-		query += " AND meeting_id = ?"
+		query += fmt.Sprintf(" AND meeting_id = $%d", paramIndex)
 		args = append(args, *filter.MeetingID)
+		paramIndex++
 	}
 	if filter.Status != nil {
-		query += " AND status = ?"
+		query += fmt.Sprintf(" AND status = $%d", paramIndex)
 		args = append(args, *filter.Status)
+		paramIndex++
 	}
 	if filter.BotContainerID != nil {
-		query += " AND bot_container_id = ?"
+		query += fmt.Sprintf(" AND bot_container_id = $%d", paramIndex)
 		args = append(args, *filter.BotContainerID)
+		paramIndex++
 	}
 	if filter.RecordingSessionID != nil {
-		query += " AND recording_session_id = ?"
+		query += fmt.Sprintf(" AND recording_session_id = $%d", paramIndex)
 		args = append(args, *filter.RecordingSessionID)
+		paramIndex++
 	}
 
 	_, err := r.db.Exec(ctx, query, args...)
@@ -599,7 +635,7 @@ func (r *MeetingRepository) GetActiveRecordings(ctx context.Context) ([]*types.M
 		SELECT id, user_id, platform, meeting_id, bot_container_id, recording_session_id, status, meeting_url,
 		       recording_path, started_at, completed_at, error_message, created_at, updated_at
 		FROM meetings
-		WHERE status IN (?, ?, ?, ?)
+		WHERE status IN ($1, $2, $3, $4)
 		ORDER BY created_at ASC
 	`
 
