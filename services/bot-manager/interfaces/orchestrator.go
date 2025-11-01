@@ -43,6 +43,9 @@ type BotListener interface {
 //
 // Implementations: database.MeetingRepository
 type MeetingRepository interface {
+	// GetByID retrieves a meeting by ID
+	GetByID(ctx context.Context, id int64) (*types.Meeting, error)
+
 	// Get retrieves a meeting by filter
 	Get(ctx context.Context, filter types.MeetingFilter) (*types.Meeting, error)
 

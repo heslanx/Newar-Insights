@@ -41,11 +41,8 @@ func (h *BotHandler) SpawnBot(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Get meeting from database
-	meeting, err := h.meetingRepo.Get(ctx, types.MeetingFilter{
-		UserID:    &req.UserID,
-		MeetingID: &req.MeetingURL, // Note: using URL as meeting ID filter
-	})
+	// Get meeting from database by ID
+	meeting, err := h.meetingRepo.GetByID(ctx, req.MeetingID)
 	if err != nil {
 		log.Error().Err(err).Int64("meeting_id", req.MeetingID).Msg("Meeting not found")
 		return c.Status(404).JSON(fiber.Map{"error": "Meeting not found"})
@@ -73,10 +70,7 @@ func (h *BotHandler) SpawnBot(c *fiber.Ctx) error {
 	}
 
 	// Fetch updated meeting to get recording_session_id
-	updatedMeeting, err := h.meetingRepo.Get(ctx, types.MeetingFilter{
-		UserID:    &req.UserID,
-		MeetingID: &req.MeetingURL,
-	})
+	updatedMeeting, err := h.meetingRepo.GetByID(ctx, req.MeetingID)
 	if err != nil {
 		log.Error().Err(err).Int64("meeting_id", req.MeetingID).Msg("Failed to fetch updated meeting")
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch meeting after spawn"})

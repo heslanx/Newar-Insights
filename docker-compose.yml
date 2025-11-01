@@ -84,7 +84,7 @@ services:
       # API Gateway
       - API_GATEWAY_PORT=8080
       - API_GATEWAY_RATE_LIMIT=${API_GATEWAY_RATE_LIMIT:-10}
-      - BOT_MANAGER_URL=http://bot-manager:8082
+      - BOT_MANAGER_URL=http://bot-manager:8080
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-info}
       # CORS

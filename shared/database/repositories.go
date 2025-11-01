@@ -302,8 +302,9 @@ func (r *MeetingRepository) Create(ctx context.Context, userID int64, req types.
 // GetByID retrieves a meeting by ID
 func (r *MeetingRepository) GetByID(ctx context.Context, id int64) (*types.Meeting, error) {
 	query := `
-		SELECT id, user_id, platform, meeting_id, bot_container_id, status, meeting_url,
-		       recording_path, started_at, completed_at, error_message, created_at, updated_at
+		SELECT id, user_id, platform, meeting_id, meeting_url, bot_name, bot_container_id,
+		       recording_session_id, status, recording_path, recording_duration, error_message,
+		       started_at, completed_at, created_at, updated_at
 		FROM meetings WHERE id = $1
 	`
 
@@ -313,13 +314,16 @@ func (r *MeetingRepository) GetByID(ctx context.Context, id int64) (*types.Meeti
 		&meeting.UserID,
 		&meeting.Platform,
 		&meeting.MeetingID,
-		&meeting.BotContainerID,
-		&meeting.Status,
 		&meeting.MeetingURL,
+		&meeting.BotName,
+		&meeting.BotContainerID,
+		&meeting.RecordingSessionID,
+		&meeting.Status,
 		&meeting.RecordingPath,
+		&meeting.RecordingDuration,
+		&meeting.ErrorMessage,
 		&meeting.StartedAt,
 		&meeting.CompletedAt,
-		&meeting.ErrorMessage,
 		&meeting.CreatedAt,
 		&meeting.UpdatedAt,
 	)
