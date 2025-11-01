@@ -7,23 +7,24 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog/log"
 
-	"github.com/newar/insights/services/bot-manager/orchestrator"
+	"github.com/newar/insights/services/bot-manager/interfaces"
 	"github.com/newar/insights/shared/constants"
-	"github.com/newar/insights/shared/database"
 	"github.com/newar/insights/shared/types"
 )
 
 type BotHandler struct {
-	docker   *orchestrator.DockerOrchestrator
-	listener *orchestrator.StatusListener
-	meetingRepo *database.MeetingRepository
+	orchestrator interfaces.BotOrchestrator
+	listener     interfaces.BotListener
+	meetingRepo  interfaces.MeetingRepository
+	userRepo     interfaces.UserRepository
 }
 
-func NewBotHandler(docker *orchestrator.DockerOrchestrator, listener *orchestrator.StatusListener, meetingRepo *database.MeetingRepository) *BotHandler {
+func NewBotHandler(orchestrator interfaces.BotOrchestrator, listener interfaces.BotListener, meetingRepo interfaces.MeetingRepository, userRepo interfaces.UserRepository) *BotHandler {
 	return &BotHandler{
-		docker:   docker,
-		listener: listener,
-		meetingRepo: meetingRepo,
+		orchestrator: orchestrator,
+		listener:     listener,
+		meetingRepo:  meetingRepo,
+		userRepo:     userRepo,
 	}
 }
 
@@ -40,9 +41,25 @@ func (h *BotHandler) SpawnBot(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Spawn Docker container
-	containerID, err := h.docker.SpawnBot(ctx, req)
+	// Get meeting from database
+	meeting, err := h.meetingRepo.Get(ctx, types.MeetingFilter{
+		UserID:    &req.UserID,
+		MeetingID: &req.MeetingURL, // Note: using URL as meeting ID filter
+	})
 	if err != nil {
+		log.Error().Err(err).Int64("meeting_id", req.MeetingID).Msg("Meeting not found")
+		return c.Status(404).JSON(fiber.Map{"error": "Meeting not found"})
+	}
+
+	// Get user from database
+	user, err := h.userRepo.GetByID(ctx, req.UserID)
+	if err != nil {
+		log.Error().Err(err).Int64("user_id", req.UserID).Msg("User not found")
+		return c.Status(404).JSON(fiber.Map{"error": "User not found"})
+	}
+
+	// Spawn bot container (orchestrator updates meeting internally)
+	if err := h.orchestrator.SpawnBot(ctx, meeting, user); err != nil {
 		log.Error().
 			Err(err).
 			Int64("meeting_id", req.MeetingID).
@@ -55,46 +72,42 @@ func (h *BotHandler) SpawnBot(c *fiber.Ctx) error {
 		})
 	}
 
-	// Update meeting with container ID
-	updateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	err = h.meetingRepo.UpdateStatus(
-		updateCtx,
-		req.MeetingID,
-		types.StatusJoining,
-		&containerID,
-		nil,
-		nil,
-	)
-
+	// Fetch updated meeting to get recording_session_id
+	updatedMeeting, err := h.meetingRepo.Get(ctx, types.MeetingFilter{
+		UserID:    &req.UserID,
+		MeetingID: &req.MeetingURL,
+	})
 	if err != nil {
-		log.Error().
-			Err(err).
-			Int64("meeting_id", req.MeetingID).
-			Msg("Failed to update meeting status")
-		// Don't fail the request, container is already spawned
+		log.Error().Err(err).Int64("meeting_id", req.MeetingID).Msg("Failed to fetch updated meeting")
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch meeting after spawn"})
 	}
 
-	// Start listening for status updates from this container
-	go func() {
-		listenerCtx := context.Background() // Long-lived context
-		if err := h.listener.ListenForContainer(listenerCtx, containerID); err != nil {
-			log.Error().
-				Err(err).
-				Str("container_id", containerID).
-				Msg("Status listener stopped")
-		}
-	}()
+	sessionID := ""
+	if updatedMeeting.RecordingSessionID != nil {
+		sessionID = *updatedMeeting.RecordingSessionID
+	}
+
+	// Start listening for status updates from this recording session
+	if sessionID != "" {
+		go func() {
+			listenerCtx := context.Background() // Long-lived context
+			if err := h.listener.ListenForContainer(listenerCtx, sessionID); err != nil {
+				log.Error().
+					Err(err).
+					Str("session_id", sessionID).
+					Msg("Status listener stopped")
+			}
+		}()
+	}
 
 	log.Info().
 		Int64("meeting_id", req.MeetingID).
-		Str("container_id", containerID).
+		Str("session_id", sessionID).
 		Msg("Bot spawned successfully")
 
 	return c.Status(201).JSON(types.SpawnBotResponse{
-		ContainerID: containerID,
-		Status:      string(types.StatusJoining),
+		ContainerID: sessionID,
+		Status:      string(updatedMeeting.Status),
 	})
 }
 
@@ -105,9 +118,8 @@ func (h *BotHandler) StopBot(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Send stop command via Redis (bot will handle gracefully)
-	// For now, just stop the container directly
-	if err := h.docker.StopBot(ctx, containerID); err != nil {
+	// Stop bot via orchestrator (abstracted)
+	if err := h.orchestrator.StopBot(ctx, containerID); err != nil {
 		log.Error().
 			Err(err).
 			Str("container_id", containerID).

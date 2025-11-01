@@ -2,7 +2,7 @@ version: '3.8'
 
 # ==========================================
 # Newar Insights - Docker Compose
-# Development & Production Setup
+# Production Setup with Supabase PostgreSQL + Storage
 # ==========================================
 
 services:
@@ -36,14 +36,14 @@ services:
     ports:
       - "8081:8081"
     environment:
-      - DATABASE_TYPE=sqlite
-      - SQLITE_PATH=/app/storage/database/newar.db
+      # Supabase PostgreSQL
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      # Admin API
       - ADMIN_API_KEY=${ADMIN_API_KEY:-admin_secret_change_me}
       - ADMIN_API_PORT=8081
       - LOG_LEVEL=${LOG_LEVEL:-info}
-    volumes:
-      - ./storage:/app/storage
-      - ./migrations:/app/migrations
     depends_on:
       - redis
     healthcheck:
@@ -67,19 +67,25 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - DATABASE_TYPE=sqlite
-      - SQLITE_PATH=/app/storage/database/newar.db
+      # Supabase PostgreSQL
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      # Supabase Storage
+      - SUPABASE_STORAGE_BUCKET=${SUPABASE_STORAGE_BUCKET}
+      - SUPABASE_STORAGE_ENDPOINT=${SUPABASE_STORAGE_ENDPOINT}
+      - SUPABASE_STORAGE_ACCESS_KEY=${SUPABASE_STORAGE_ACCESS_KEY}
+      - SUPABASE_STORAGE_SECRET_KEY=${SUPABASE_STORAGE_SECRET_KEY}
+      # Redis
       - REDIS_URL=redis://redis:6379
+      # API Gateway
       - API_GATEWAY_PORT=8080
       - API_GATEWAY_RATE_LIMIT=${API_GATEWAY_RATE_LIMIT:-10}
       - BOT_MANAGER_URL=http://bot-manager:8082
-      - STORAGE_TYPE=local
-      - STORAGE_PATH=/app/storage/recordings
+      # Logging
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      # CORS
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-*}
-    volumes:
-      - ./storage:/app/storage
-      - ./migrations:/app/migrations
     depends_on:
       - redis
       - admin-api
@@ -104,17 +110,24 @@ services:
     ports:
       - "8082:8082"
     environment:
-      - DATABASE_TYPE=sqlite
-      - SQLITE_PATH=/app/storage/database/newar.db
+      # Supabase PostgreSQL
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      # Supabase Storage
+      - SUPABASE_STORAGE_BUCKET=${SUPABASE_STORAGE_BUCKET}
+      - SUPABASE_STORAGE_ENDPOINT=${SUPABASE_STORAGE_ENDPOINT}
+      - SUPABASE_STORAGE_ACCESS_KEY=${SUPABASE_STORAGE_ACCESS_KEY}
+      - SUPABASE_STORAGE_SECRET_KEY=${SUPABASE_STORAGE_SECRET_KEY}
+      # Redis
       - REDIS_URL=redis://redis:6379
+      # Bot Manager
       - BOT_MANAGER_PORT=8082
       - BOT_IMAGE=${BOT_IMAGE:-newar-recording-bot:latest}
       - MAX_CONCURRENT_BOTS=${MAX_CONCURRENT_BOTS:-10}
-      - STORAGE_TYPE=local
-      - STORAGE_PATH=/app/storage/recordings
+      # Logging
       - LOG_LEVEL=${LOG_LEVEL:-info}
     volumes:
-      - ./storage:/app/storage
       - /var/run/docker.sock:/var/run/docker.sock  # CRITICAL: Docker socket access
     depends_on:
       - redis
@@ -151,10 +164,14 @@ networks:
 # 2. The bot-manager spawns recording-bot containers dynamically,
 #    so there's no recording-bot service in this compose file.
 #
-# 3. For production, replace SQLite with Supabase:
-#    - Set DATABASE_TYPE=supabase
-#    - Set SUPABASE_URL and SUPABASE_KEY
+# 3. All data is stored in Supabase PostgreSQL and Supabase Storage.
+#    No local storage needed.
 #
-# 4. Storage is shared across all services via volume mount.
+# 4. Bot Manager needs Docker socket access to spawn bot containers.
 #
-# 5. Bot Manager needs Docker socket access to spawn bot containers.
+# 5. Before starting, create schema in Supabase:
+#    Execute migrations/postgres/001_initial_schema_supabase.sql
+#    in Supabase SQL Editor
+#
+# 6. Before starting, create bucket "insights" in Supabase Storage:
+#    Follow instructions in docs/SUPABASE_STORAGE_SETUP.md

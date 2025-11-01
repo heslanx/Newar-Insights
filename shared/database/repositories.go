@@ -298,6 +298,70 @@ func (r *MeetingRepository) GetByID(ctx context.Context, id int64) (*types.Meeti
 	return &meeting, nil
 }
 
+// Get retrieves a meeting by filter
+func (r *MeetingRepository) Get(ctx context.Context, filter types.MeetingFilter) (*types.Meeting, error) {
+	query := `
+		SELECT id, user_id, platform, meeting_id, bot_container_id, recording_session_id, status, meeting_url,
+		       recording_path, started_at, completed_at, error_message, created_at, updated_at
+		FROM meetings WHERE 1=1
+	`
+	args := []interface{}{}
+
+	if filter.UserID != nil {
+		query += " AND user_id = ?"
+		args = append(args, *filter.UserID)
+	}
+	if filter.Platform != nil {
+		query += " AND platform = ?"
+		args = append(args, *filter.Platform)
+	}
+	if filter.MeetingID != nil {
+		query += " AND meeting_id = ?"
+		args = append(args, *filter.MeetingID)
+	}
+	if filter.Status != nil {
+		query += " AND status = ?"
+		args = append(args, *filter.Status)
+	}
+	if filter.BotContainerID != nil {
+		query += " AND bot_container_id = ?"
+		args = append(args, *filter.BotContainerID)
+	}
+	if filter.RecordingSessionID != nil {
+		query += " AND recording_session_id = ?"
+		args = append(args, *filter.RecordingSessionID)
+	}
+
+	query += " LIMIT 1"
+
+	var meeting types.Meeting
+	err := r.db.QueryRow(ctx, query, args...).Scan(
+		&meeting.ID,
+		&meeting.UserID,
+		&meeting.Platform,
+		&meeting.MeetingID,
+		&meeting.BotContainerID,
+		&meeting.RecordingSessionID,
+		&meeting.Status,
+		&meeting.MeetingURL,
+		&meeting.RecordingPath,
+		&meeting.StartedAt,
+		&meeting.CompletedAt,
+		&meeting.ErrorMessage,
+		&meeting.CreatedAt,
+		&meeting.UpdatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("meeting not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get meeting: %w", err)
+	}
+
+	return &meeting, nil
+}
+
 // GetByPlatformAndMeetingID retrieves a meeting by platform and meeting ID
 func (r *MeetingRepository) GetByPlatformAndMeetingID(ctx context.Context, userID int64, platform types.Platform, meetingID string) (*types.Meeting, error) {
 	query := `
@@ -334,11 +398,12 @@ func (r *MeetingRepository) GetByPlatformAndMeetingID(ctx context.Context, userI
 }
 
 // UpdateStatus updates a meeting status
-func (r *MeetingRepository) UpdateStatus(ctx context.Context, id int64, status types.MeetingStatus, containerID, errorMsg, recordingPath *string) error {
+func (r *MeetingRepository) UpdateStatus(ctx context.Context, id int64, status types.MeetingStatus, recordingPath *string, errorMsg *string, recordingDuration *int) error {
 	query := `
 		UPDATE meetings
-		SET status = ?, bot_container_id = COALESCE(?, bot_container_id),
-		    error_message = ?, recording_path = COALESCE(?, recording_path), updated_at = ?
+		SET status = ?, recording_path = COALESCE(?, recording_path),
+		    error_message = ?, recording_duration = COALESCE(?, recording_duration), updated_at = ?
+		WHERE id = ?
 	`
 
 	// Set started_at when status changes to active
@@ -346,11 +411,10 @@ func (r *MeetingRepository) UpdateStatus(ctx context.Context, id int64, status t
 		now := time.Now()
 		query = `
 			UPDATE meetings
-			SET status = ?, bot_container_id = COALESCE(?, bot_container_id),
-			    started_at = ?, updated_at = ?
+			SET status = ?, started_at = ?, updated_at = ?
 			WHERE id = ?
 		`
-		_, err := r.db.Exec(ctx, query, status, containerID, now, now, id)
+		_, err := r.db.Exec(ctx, query, status, now, now, id)
 		return err
 	}
 
@@ -360,14 +424,14 @@ func (r *MeetingRepository) UpdateStatus(ctx context.Context, id int64, status t
 		query = `
 			UPDATE meetings
 			SET status = ?, error_message = ?, recording_path = COALESCE(?, recording_path),
-			    completed_at = ?, updated_at = ?
+			    recording_duration = COALESCE(?, recording_duration), completed_at = ?, updated_at = ?
 			WHERE id = ?
 		`
-		_, err := r.db.Exec(ctx, query, status, errorMsg, recordingPath, now, now, id)
+		_, err := r.db.Exec(ctx, query, status, errorMsg, recordingPath, recordingDuration, now, now, id)
 		return err
 	}
 
-	_, err := r.db.Exec(ctx, query, status, containerID, errorMsg, recordingPath, time.Now(), id)
+	_, err := r.db.Exec(ctx, query, status, recordingPath, errorMsg, recordingDuration, time.Now(), id)
 	return err
 }
 
@@ -436,4 +500,122 @@ func (r *MeetingRepository) CountActiveByUser(ctx context.Context, userID int64)
 	}
 
 	return count, nil
+}
+
+// Update updates a meeting with flexible filter and update params
+func (r *MeetingRepository) Update(ctx context.Context, filter types.MeetingFilter, update types.MeetingUpdate) error {
+	query := "UPDATE meetings SET updated_at = ?"
+	args := []interface{}{time.Now()}
+
+	// Build SET clause
+	if update.Status != nil {
+		query += ", status = ?"
+		args = append(args, *update.Status)
+	}
+	if update.BotContainerID != nil {
+		query += ", bot_container_id = ?"
+		args = append(args, *update.BotContainerID)
+	}
+	if update.RecordingPath != nil {
+		query += ", recording_path = ?"
+		args = append(args, *update.RecordingPath)
+	}
+	if update.RecordingDuration != nil {
+		query += ", recording_duration = ?"
+		args = append(args, *update.RecordingDuration)
+	}
+	if update.ErrorMessage != nil {
+		query += ", error_message = ?"
+		args = append(args, *update.ErrorMessage)
+	}
+	if update.StartedAt != nil {
+		query += ", started_at = ?"
+		args = append(args, *update.StartedAt)
+	}
+	if update.CompletedAt != nil {
+		query += ", completed_at = ?"
+		args = append(args, *update.CompletedAt)
+	}
+
+	// Build WHERE clause
+	query += " WHERE 1=1"
+	if filter.UserID != nil {
+		query += " AND user_id = ?"
+		args = append(args, *filter.UserID)
+	}
+	if filter.Platform != nil {
+		query += " AND platform = ?"
+		args = append(args, *filter.Platform)
+	}
+	if filter.MeetingID != nil {
+		query += " AND meeting_id = ?"
+		args = append(args, *filter.MeetingID)
+	}
+	if filter.Status != nil {
+		query += " AND status = ?"
+		args = append(args, *filter.Status)
+	}
+	if filter.BotContainerID != nil {
+		query += " AND bot_container_id = ?"
+		args = append(args, *filter.BotContainerID)
+	}
+	if filter.RecordingSessionID != nil {
+		query += " AND recording_session_id = ?"
+		args = append(args, *filter.RecordingSessionID)
+	}
+
+	_, err := r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to update meeting: %w", err)
+	}
+
+	return nil
+}
+
+// GetActiveRecordings retrieves all recordings in active states
+func (r *MeetingRepository) GetActiveRecordings(ctx context.Context) ([]*types.Meeting, error) {
+	query := `
+		SELECT id, user_id, platform, meeting_id, bot_container_id, recording_session_id, status, meeting_url,
+		       recording_path, started_at, completed_at, error_message, created_at, updated_at
+		FROM meetings
+		WHERE status IN (?, ?, ?, ?)
+		ORDER BY created_at ASC
+	`
+
+	rows, err := r.db.Query(ctx, query, types.StatusRequested, types.StatusJoining, types.StatusActive, types.StatusRecording)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active recordings: %w", err)
+	}
+	defer rows.Close()
+
+	meetings := []*types.Meeting{}
+	for rows.Next() {
+		var meeting types.Meeting
+		err := rows.Scan(
+			&meeting.ID,
+			&meeting.UserID,
+			&meeting.Platform,
+			&meeting.MeetingID,
+			&meeting.BotContainerID,
+			&meeting.RecordingSessionID,
+			&meeting.Status,
+			&meeting.MeetingURL,
+			&meeting.RecordingPath,
+			&meeting.StartedAt,
+			&meeting.CompletedAt,
+			&meeting.ErrorMessage,
+			&meeting.CreatedAt,
+			&meeting.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan meeting: %w", err)
+		}
+		meetings = append(meetings, &meeting)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return meetings, nil
 }

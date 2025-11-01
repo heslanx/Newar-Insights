@@ -1,6 +1,9 @@
 package types
 
-import "time"
+import (
+	"database/sql"
+	"time"
+)
 
 // =====================================================
 // USER TYPES
@@ -8,13 +11,14 @@ import "time"
 
 // User represents a system user with API access
 type User struct {
-	ID                 int64     `json:"id" db:"id"`
-	Email              string    `json:"email" db:"email" validate:"required,email"`
-	Name               string    `json:"name" db:"name" validate:"required,min=2,max=255"`
-	MaxConcurrentBots  int       `json:"max_concurrent_bots" db:"max_concurrent_bots" validate:"gte=1,lte=50"`
-	CreatedAt          time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at" db:"updated_at"`
-	ActiveRecordings   int       `json:"active_recordings,omitempty" db:"-"` // Computed field
+	ID                 int64           `json:"id" db:"id"`
+	Email              string          `json:"email" db:"email" validate:"required,email"`
+	Name               string          `json:"name" db:"name" validate:"required,min=2,max=255"`
+	MaxConcurrentBots  int             `json:"max_concurrent_bots" db:"max_concurrent_bots" validate:"gte=1,lte=50"`
+	Data               []byte          `json:"data,omitempty" db:"data"` // Custom JSON data
+	CreatedAt          time.Time       `json:"created_at" db:"created_at"`
+	UpdatedAt          time.Time       `json:"updated_at" db:"updated_at"`
+	ActiveRecordings   int             `json:"active_recordings,omitempty" db:"-"` // Computed field
 }
 
 // CreateUserRequest is the request body for creating a user
@@ -56,13 +60,13 @@ type GenerateTokenResponse struct {
 type MeetingStatus string
 
 const (
-	StatusRequested  MeetingStatus = "requested"
-	StatusJoining    MeetingStatus = "joining"
-	StatusActive     MeetingStatus = "active"
-	StatusRecording  MeetingStatus = "recording"
-	StatusFinalizing MeetingStatus = "finalizing"
-	StatusCompleted  MeetingStatus = "completed"
-	StatusFailed     MeetingStatus = "failed"
+	MeetingStatusRequested  MeetingStatus = "requested"
+	MeetingStatusJoining    MeetingStatus = "joining"
+	MeetingStatusActive     MeetingStatus = "active"
+	MeetingStatusRecording  MeetingStatus = "recording"
+	MeetingStatusFinalizing MeetingStatus = "finalizing"
+	MeetingStatusCompleted  MeetingStatus = "completed"
+	MeetingStatusFailed     MeetingStatus = "failed"
 )
 
 // Platform represents supported meeting platforms
@@ -75,20 +79,23 @@ const (
 
 // Meeting represents a recording session
 type Meeting struct {
-	ID             int64         `json:"id" db:"id"`
-	UserID         int64         `json:"user_id" db:"user_id"`
-	Platform       Platform      `json:"platform" db:"platform"`
-	MeetingID      string        `json:"meeting_id" db:"meeting_id"`
-	BotContainerID *string       `json:"bot_container_id,omitempty" db:"bot_container_id"`
-	Status         MeetingStatus `json:"status" db:"status"`
-	MeetingURL     string        `json:"meeting_url" db:"meeting_url"`
-	RecordingPath  *string       `json:"recording_path,omitempty" db:"recording_path"`
-	RecordingURL   *string       `json:"recording_url,omitempty" db:"-"` // Computed
-	StartedAt      *time.Time    `json:"started_at,omitempty" db:"started_at"`
-	CompletedAt    *time.Time    `json:"completed_at,omitempty" db:"completed_at"`
-	ErrorMessage   *string       `json:"error_message,omitempty" db:"error_message"`
-	CreatedAt      time.Time     `json:"created_at" db:"created_at"`
-	UpdatedAt      time.Time     `json:"updated_at" db:"updated_at"`
+	ID                 int64         `json:"id" db:"id"`
+	UserID             int64         `json:"user_id" db:"user_id"`
+	Platform           Platform      `json:"platform" db:"platform"`
+	MeetingID          string        `json:"meeting_id" db:"meeting_id"`
+	MeetingURL         string        `json:"meeting_url" db:"meeting_url"`
+	BotName            *string       `json:"bot_name,omitempty" db:"bot_name"`
+	BotContainerID     *string       `json:"bot_container_id,omitempty" db:"bot_container_id"`
+	RecordingSessionID *string       `json:"recording_session_id,omitempty" db:"recording_session_id"`
+	Status             MeetingStatus `json:"status" db:"status"`
+	RecordingPath      *string       `json:"recording_path,omitempty" db:"recording_path"`
+	RecordingDuration  *int          `json:"recording_duration,omitempty" db:"recording_duration"` // seconds
+	RecordingURL       *string       `json:"recording_url,omitempty" db:"-"` // Computed
+	ErrorMessage       *string       `json:"error_message,omitempty" db:"error_message"`
+	StartedAt          *time.Time    `json:"started_at,omitempty" db:"started_at"`
+	CompletedAt        *time.Time    `json:"completed_at,omitempty" db:"completed_at"`
+	CreatedAt          time.Time     `json:"created_at" db:"created_at"`
+	UpdatedAt          time.Time     `json:"updated_at" db:"updated_at"`
 }
 
 // CreateRecordingRequest is the request body for starting a recording
@@ -201,3 +208,42 @@ type ChunkMetadata struct {
 	Size      int64     `json:"size"`
 	UploadedAt time.Time `json:"uploaded_at"`
 }
+
+// =====================================================
+// DATABASE FILTER & UPDATE TYPES
+// =====================================================
+
+// Status constants (string versions for database queries)
+const (
+	StatusRequested  = "requested"
+	StatusJoining    = "joining"
+	StatusActive     = "active"
+	StatusRecording  = "recording"
+	StatusFinalizing = "finalizing"
+	StatusCompleted  = "completed"
+	StatusFailed     = "failed"
+)
+
+// MeetingFilter for flexible database queries
+type MeetingFilter struct {
+	UserID             *int64
+	Platform           *string
+	MeetingID          *string
+	Status             *string
+	BotContainerID     *string
+	RecordingSessionID *string
+}
+
+// MeetingUpdate for flexible database updates
+type MeetingUpdate struct {
+	Status            *string
+	BotContainerID    *string
+	RecordingPath     *string
+	RecordingDuration *int
+	ErrorMessage      *string
+	StartedAt         *time.Time
+	CompletedAt       *time.Time
+}
+
+// Rows is a type alias for sql.Rows used in repository interfaces
+type Rows = *sql.Rows

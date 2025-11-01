@@ -42,23 +42,28 @@ func NewDockerOrchestrator(botImage, redisURL, storageType, storagePath string) 
 }
 
 // SpawnBot creates and starts a new recording bot container
-func (o *DockerOrchestrator) SpawnBot(ctx context.Context, req types.SpawnBotRequest) (string, error) {
-	containerName := fmt.Sprintf("%s%d-%d", constants.BotContainerPrefix, req.MeetingID, time.Now().Unix())
+func (o *DockerOrchestrator) SpawnBot(ctx context.Context, meeting *types.Meeting, user *types.User) error {
+	containerName := fmt.Sprintf("%s%d-%d", constants.BotContainerPrefix, meeting.ID, time.Now().Unix())
 
 	log.Info().
-		Int64("meeting_id", req.MeetingID).
+		Int64("meeting_id", meeting.ID).
 		Str("container_name", containerName).
 		Msg("Spawning recording bot container")
+
+	botName := "Newar Bot"
+	if meeting.BotName != nil {
+		botName = *meeting.BotName
+	}
 
 	// Container configuration
 	config := &container.Config{
 		Image: o.botImage,
 		Env: []string{
-			fmt.Sprintf("MEETING_ID=%d", req.MeetingID),
-			fmt.Sprintf("USER_ID=%d", req.UserID),
-			fmt.Sprintf("PLATFORM=%s", req.Platform),
-			fmt.Sprintf("MEETING_URL=%s", req.MeetingURL),
-			fmt.Sprintf("BOT_NAME=%s", req.BotName),
+			fmt.Sprintf("MEETING_ID=%d", meeting.ID),
+			fmt.Sprintf("USER_ID=%d", user.ID),
+			fmt.Sprintf("PLATFORM=%s", meeting.Platform),
+			fmt.Sprintf("MEETING_URL=%s", meeting.MeetingURL),
+			fmt.Sprintf("BOT_NAME=%s", botName),
 			fmt.Sprintf("REDIS_URL=%s", o.redisURL),
 			fmt.Sprintf("STORAGE_TYPE=%s", o.storageType),
 			fmt.Sprintf("STORAGE_PATH=%s", o.storagePath),
@@ -66,9 +71,9 @@ func (o *DockerOrchestrator) SpawnBot(ctx context.Context, req types.SpawnBotReq
 			fmt.Sprintf("AUDIO_BITRATE=%d", constants.DefaultAudioBitrate),
 		},
 		Labels: map[string]string{
-			"newar.meeting_id": fmt.Sprintf("%d", req.MeetingID),
-			"newar.user_id":    fmt.Sprintf("%d", req.UserID),
-			"newar.platform":   string(req.Platform),
+			"newar.meeting_id": fmt.Sprintf("%d", meeting.ID),
+			"newar.user_id":    fmt.Sprintf("%d", user.ID),
+			"newar.platform":   string(meeting.Platform),
 		},
 	}
 
@@ -84,7 +89,7 @@ func (o *DockerOrchestrator) SpawnBot(ctx context.Context, req types.SpawnBotReq
 	// Create container
 	resp, err := o.client.ContainerCreate(ctx, config, hostConfig, nil, nil, containerName)
 	if err != nil {
-		return "", fmt.Errorf("failed to create container: %w", err)
+		return fmt.Errorf("failed to create container: %w", err)
 	}
 
 	containerID := resp.ID
@@ -96,14 +101,14 @@ func (o *DockerOrchestrator) SpawnBot(ctx context.Context, req types.SpawnBotReq
 
 	// Start container
 	if err := o.client.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
-		return "", fmt.Errorf("failed to start container: %w", err)
+		return fmt.Errorf("failed to start container: %w", err)
 	}
 
 	log.Info().
 		Str("container_id", containerID).
 		Msg("Container started successfully")
 
-	return containerID, nil
+	return nil
 }
 
 // StopBot stops a running bot container
@@ -157,6 +162,13 @@ func (o *DockerOrchestrator) GetContainerLogs(ctx context.Context, containerID s
 	}
 
 	return string(logs), nil
+}
+
+// GetBotStatus retrieves the current status of a bot
+func (o *DockerOrchestrator) GetBotStatus(ctx context.Context, sessionID string) (*types.BotStatusUpdate, error) {
+	// This is a stub implementation - in a real scenario, you'd query the bot's status
+	// For now, we return nil to indicate the method exists
+	return nil, fmt.Errorf("GetBotStatus not implemented - status should be retrieved via Redis")
 }
 
 // Close closes the Docker client

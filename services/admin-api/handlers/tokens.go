@@ -6,21 +6,21 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog/log"
 
+	"github.com/newar/insights/services/admin-api/interfaces"
 	"github.com/newar/insights/shared/constants"
-	"github.com/newar/insights/shared/database"
 	"github.com/newar/insights/shared/types"
 	"github.com/newar/insights/shared/utils"
 )
 
 type TokenHandler struct {
-	tokenRepo *database.TokenRepository
-	userRepo  *database.UserRepository
+	tokenManager interfaces.TokenManager
+	userManager  interfaces.UserManager
 }
 
-func NewTokenHandler(tokenRepo *database.TokenRepository, userRepo *database.UserRepository) *TokenHandler {
+func NewTokenHandler(tokenManager interfaces.TokenManager, userManager interfaces.UserManager) *TokenHandler {
 	return &TokenHandler{
-		tokenRepo: tokenRepo,
-		userRepo:  userRepo,
+		tokenManager: tokenManager,
+		userManager:  userManager,
 	}
 }
 
@@ -37,7 +37,7 @@ func (h *TokenHandler) GenerateToken(c *fiber.Ctx) error {
 	defer cancel()
 
 	// Verify user exists
-	_, err = h.userRepo.GetByID(ctx, int64(userID))
+	_, err = h.userManager.GetByID(ctx, int64(userID))
 	if err != nil {
 		log.Warn().Err(err).Int("user_id", userID).Msg("User not found")
 		return c.Status(404).JSON(fiber.Map{
@@ -55,7 +55,7 @@ func (h *TokenHandler) GenerateToken(c *fiber.Ctx) error {
 	}
 
 	// Store token hash in database
-	apiToken, err := h.tokenRepo.Create(ctx, int64(userID), token)
+	apiToken, err := h.tokenManager.Create(ctx, int64(userID), token)
 	if err != nil {
 		log.Error().Err(err).Int("user_id", userID).Msg("Failed to create token")
 		return c.Status(500).JSON(fiber.Map{

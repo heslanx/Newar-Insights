@@ -1,0 +1,80 @@
+run:
+  timeout: 5m
+  tests: true
+  build-tags:
+    - integration
+
+linters:
+  enable:
+    - errcheck      # Check for unchecked errors
+    - gosimple      # Simplify code
+    - govet         # Examine Go source code and reports suspicious constructs
+    - ineffassign   # Detect ineffectual assignments
+    - staticcheck   # Go static analysis
+    - unused        # Check for unused constants, variables, functions and types
+    - gofmt         # Check whether code was gofmt-ed
+    - goimports     # Check import statements are formatted
+    - misspell      # Find commonly misspelled English words
+    - revive        # Fast, configurable, extensible, flexible, and beautiful linter for Go
+    - gosec         # Security checker
+    - bodyclose     # Check whether HTTP response body is closed successfully
+    - goconst       # Find repeated strings that could be replaced by a constant
+    - gocritic      # Provides diagnostics that check for bugs, performance and style issues
+    - goprintffuncname # Check that printf-like functions are named with f at the end
+    - noctx         # Find sending http request without context.Context
+    - rowserrcheck  # Check whether Err of rows is checked successfully
+    - sqlclosecheck # Check that sql.Rows and sql.Stmt are closed
+
+linters-settings:
+  errcheck:
+    check-blank: true
+    check-type-assertions: true
+
+  govet:
+    check-shadowing: true
+    enable-all: true
+
+  revive:
+    rules:
+      - name: exported
+        severity: warning
+        disabled: false
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: if-return
+      - name: var-naming
+      - name: package-comments
+        disabled: true  # Too noisy for now
+      - name: exported
+        disabled: true  # Too noisy for now
+
+  gosec:
+    excludes:
+      - G104  # Audit errors not checked (covered by errcheck)
+      - G307  # Deferring unsafe method (false positives)
+
+  goimports:
+    local-prefixes: github.com/newar/insights
+
+issues:
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+        - goconst
+
+    # Exclude main.go from some linters
+    - path: main\.go
+      linters:
+        - goconst
+
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true

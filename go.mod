@@ -7,7 +7,7 @@ toolchain go1.24.9
 require (
 	github.com/docker/docker v25.0.0+incompatible
 	github.com/gofiber/fiber/v2 v2.52.0
-	github.com/mattn/go-sqlite3 v1.14.19
+	github.com/lib/pq v1.10.9
 	github.com/redis/go-redis/v9 v9.4.0
 	github.com/rs/zerolog v1.31.0
 )

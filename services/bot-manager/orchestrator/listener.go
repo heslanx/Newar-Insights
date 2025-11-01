@@ -90,3 +90,25 @@ func (l *StatusListener) handleStatusUpdate(status types.BotStatusUpdate) {
 			Msg("Failed to update meeting status")
 	}
 }
+
+// StartListening begins listening for status updates from a bot (legacy compatibility)
+func (l *StatusListener) StartListening(sessionID string, meetingID int64) {
+	// Legacy method for backward compatibility
+	// Spawns a goroutine to listen for this session
+	go func() {
+		ctx := context.Background()
+		if err := l.ListenForContainer(ctx, sessionID); err != nil {
+			log.Error().
+				Err(err).
+				Str("session_id", sessionID).
+				Int64("meeting_id", meetingID).
+				Msg("Status listener stopped")
+		}
+	}()
+}
+
+// StopListening stops listening for status updates from a bot
+func (l *StatusListener) StopListening(sessionID string) {
+	// This is a stub - actual implementation would need context cancellation
+	log.Info().Str("session_id", sessionID).Msg("StopListening called (no-op)")
+}

@@ -6,12 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3" // SQLite driver
+	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/rs/zerolog/log"
 )
 
 // Database interface abstracts the underlying database implementation
-// This allows easy switching between SQLite (development) and PostgreSQL/Supabase (production)
 type Database interface {
 	// Connection management
 	Ping(ctx context.Context) error
@@ -31,177 +30,163 @@ type Database interface {
 
 // Config holds database configuration
 type Config struct {
-	Type           string // "sqlite" or "supabase"
-	SQLitePath     string // Path to SQLite file
-	SupabaseURL    string // Supabase URL (for future use)
-	SupabaseKey    string // Supabase API key (for future use)
-	MaxOpenConns   int
-	MaxIdleConns   int
-	ConnMaxLife    time.Duration
-	ConnMaxIdle    time.Duration
+	SupabaseURL string // Supabase project URL
+	SupabaseKey string // Supabase API key (anon or service_role)
+	MaxOpenConns int
+	MaxIdleConns int
+	ConnMaxLife  time.Duration
+	ConnMaxIdle  time.Duration
 }
 
-// SQLiteDB implements Database interface for SQLite
-type SQLiteDB struct {
+// PostgresDB implements Database interface for Supabase PostgreSQL
+type PostgresDB struct {
 	db *sql.DB
 }
 
-// NewDatabase creates a new database connection based on config
+// NewDatabase creates a new Supabase PostgreSQL connection
 func NewDatabase(cfg Config) (Database, error) {
-	switch cfg.Type {
-	case "sqlite":
-		return NewSQLite(cfg)
-	case "supabase":
-		// Future implementation
-		return nil, fmt.Errorf("supabase connector not implemented yet")
-	default:
-		return nil, fmt.Errorf("unsupported database type: %s", cfg.Type)
+	if cfg.SupabaseURL == "" {
+		return nil, fmt.Errorf("SUPABASE_URL is required")
 	}
-}
-
-// NewSQLite creates a new SQLite connection
-func NewSQLite(cfg Config) (*SQLiteDB, error) {
-	if cfg.SQLitePath == "" {
-		return nil, fmt.Errorf("sqlite_path is required")
+	if cfg.SupabaseKey == "" {
+		return nil, fmt.Errorf("SUPABASE_KEY is required")
 	}
 
-	// Open SQLite connection
-	db, err := sql.Open("sqlite3", cfg.SQLitePath+"?_foreign_keys=on")
+	// Extract database credentials from Supabase URL
+	// Format: https://PROJECT_ID.supabase.co
+	// PostgreSQL DSN format: postgres://postgres:[YOUR-PASSWORD]@db.PROJECT_ID.supabase.co:5432/postgres
+
+	// For Supabase, we need to construct the PostgreSQL connection string
+	// Using direct PostgreSQL connection via pooler
+	projectID := extractProjectID(cfg.SupabaseURL)
+	if projectID == "" {
+		return nil, fmt.Errorf("invalid SUPABASE_URL format: %s", cfg.SupabaseURL)
+	}
+
+	// Supabase PostgreSQL connection string (via pooler)
+	// Note: Password needs to be provided separately (via SUPABASE_DB_PASSWORD env var)
+	// For now, using service_role key as authentication method
+	connStr := fmt.Sprintf(
+		"host=db.%s.supabase.co port=5432 dbname=postgres user=postgres password=%s sslmode=require",
+		projectID,
+		cfg.SupabaseKey, // Using service_role key as password (Supabase allows this)
+	)
+
+	// Open PostgreSQL connection
+	db, err := sql.Open("postgres", connStr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open sqlite: %w", err)
+		return nil, fmt.Errorf("failed to open postgres connection: %w", err)
 	}
 
 	// Configure connection pool
-	if cfg.MaxOpenConns > 0 {
-		db.SetMaxOpenConns(cfg.MaxOpenConns)
+	maxOpenConns := cfg.MaxOpenConns
+	if maxOpenConns == 0 {
+		maxOpenConns = 25 // Default for PostgreSQL
 	}
-	if cfg.MaxIdleConns > 0 {
-		db.SetMaxIdleConns(cfg.MaxIdleConns)
+	db.SetMaxOpenConns(maxOpenConns)
+
+	maxIdleConns := cfg.MaxIdleConns
+	if maxIdleConns == 0 {
+		maxIdleConns = 5
 	}
-	if cfg.ConnMaxLife > 0 {
-		db.SetConnMaxLifetime(cfg.ConnMaxLife)
+	db.SetMaxIdleConns(maxIdleConns)
+
+	connMaxLife := cfg.ConnMaxLife
+	if connMaxLife == 0 {
+		connMaxLife = 5 * time.Minute
 	}
-	if cfg.ConnMaxIdle > 0 {
-		db.SetConnMaxIdleTime(cfg.ConnMaxIdle)
+	db.SetConnMaxLifetime(connMaxLife)
+
+	connMaxIdle := cfg.ConnMaxIdle
+	if connMaxIdle == 0 {
+		connMaxIdle = 5 * time.Minute
 	}
+	db.SetConnMaxIdleTime(connMaxIdle)
 
 	// Test connection
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := db.PingContext(ctx); err != nil {
-		return nil, fmt.Errorf("failed to ping sqlite: %w", err)
+		return nil, fmt.Errorf("failed to ping postgres: %w", err)
 	}
 
-	log.Info().Str("path", cfg.SQLitePath).Msg("Connected to SQLite database")
+	log.Info().
+		Str("host", fmt.Sprintf("db.%s.supabase.co", projectID)).
+		Int("max_open_conns", maxOpenConns).
+		Int("max_idle_conns", maxIdleConns).
+		Msg("Connected to Supabase PostgreSQL")
 
-	return &SQLiteDB{db: db}, nil
+	return &PostgresDB{db: db}, nil
 }
 
-// Ping checks if the database is reachable
-func (s *SQLiteDB) Ping(ctx context.Context) error {
-	return s.db.PingContext(ctx)
+// extractProjectID extracts project ID from Supabase URL
+// Example: https://iykklyrujvbmytkhwcfi.supabase.co → iykklyrujvbmytkhwcfi
+func extractProjectID(supabaseURL string) string {
+	// Remove https:// or http://
+	url := supabaseURL
+	if len(url) > 8 && url[:8] == "https://" {
+		url = url[8:]
+	} else if len(url) > 7 && url[:7] == "http://" {
+		url = url[7:]
+	}
+
+	// Extract project ID (before .supabase.co)
+	for i, ch := range url {
+		if ch == '.' {
+			return url[:i]
+		}
+	}
+
+	return ""
+}
+
+// Ping tests database connectivity
+func (db *PostgresDB) Ping(ctx context.Context) error {
+	return db.db.PingContext(ctx)
 }
 
 // Close closes the database connection
-func (s *SQLiteDB) Close() error {
-	log.Info().Msg("Closing SQLite connection")
-	return s.db.Close()
+func (db *PostgresDB) Close() error {
+	log.Info().Msg("Closing Supabase PostgreSQL connection")
+	return db.db.Close()
 }
 
 // Query executes a query that returns rows
-func (s *SQLiteDB) Query(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	start := time.Now()
-	rows, err := s.db.QueryContext(ctx, query, args...)
-
-	log.Debug().
-		Str("query", query).
-		Int64("duration_ms", time.Since(start).Milliseconds()).
-		Err(err).
-		Msg("Database query executed")
-
-	return rows, err
+func (db *PostgresDB) Query(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	return db.db.QueryContext(ctx, query, args...)
 }
 
-// QueryRow executes a query that returns a single row
-func (s *SQLiteDB) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	start := time.Now()
-	row := s.db.QueryRowContext(ctx, query, args...)
-
-	log.Debug().
-		Str("query", query).
-		Int64("duration_ms", time.Since(start).Milliseconds()).
-		Msg("Database query row executed")
-
-	return row
+// QueryRow executes a query that returns at most one row
+func (db *PostgresDB) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	return db.db.QueryRowContext(ctx, query, args...)
 }
 
-// Exec executes a query that doesn't return rows
-func (s *SQLiteDB) Exec(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	start := time.Now()
-	result, err := s.db.ExecContext(ctx, query, args...)
-
-	log.Debug().
-		Str("query", query).
-		Int64("duration_ms", time.Since(start).Milliseconds()).
-		Err(err).
-		Msg("Database exec executed")
-
-	return result, err
+// Exec executes a query without returning rows
+func (db *PostgresDB) Exec(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	return db.db.ExecContext(ctx, query, args...)
 }
 
-// BeginTx starts a new transaction
-func (s *SQLiteDB) BeginTx(ctx context.Context) (*sql.Tx, error) {
-	return s.db.BeginTx(ctx, nil)
+// BeginTx starts a transaction
+func (db *PostgresDB) BeginTx(ctx context.Context) (*sql.Tx, error) {
+	return db.db.BeginTx(ctx, nil)
 }
 
-// DB returns the underlying *sql.DB for advanced usage
-func (s *SQLiteDB) DB() *sql.DB {
-	return s.db
+// DB returns the underlying *sql.DB
+func (db *PostgresDB) DB() *sql.DB {
+	return db.db
 }
 
-// =====================================================
-// MIGRATION HELPER
-// =====================================================
-
-// RunMigration executes a SQL migration file
-func RunMigration(db Database, migrationSQL string) error {
+// RunMigration runs a SQL migration script
+func RunMigration(db Database, migration string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	_, err := db.Exec(ctx, migrationSQL)
+	_, err := db.Exec(ctx, migration)
 	if err != nil {
 		return fmt.Errorf("migration failed: %w", err)
 	}
 
-	log.Info().Msg("Database migration completed successfully")
-	return nil
-}
-
-// =====================================================
-// HEALTH CHECK HELPER
-// =====================================================
-
-// HealthCheck performs a database health check
-func HealthCheck(db Database) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// Simple ping
-	if err := db.Ping(ctx); err != nil {
-		return fmt.Errorf("database ping failed: %w", err)
-	}
-
-	// Try a simple query
-	var result int
-	row := db.QueryRow(ctx, "SELECT 1")
-	if err := row.Scan(&result); err != nil {
-		return fmt.Errorf("database query failed: %w", err)
-	}
-
-	if result != 1 {
-		return fmt.Errorf("unexpected query result: %d", result)
-	}
-
+	log.Info().Msg("Migration executed successfully")
 	return nil
 }

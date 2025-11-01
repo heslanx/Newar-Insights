@@ -6,17 +6,22 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog/log"
 
+	"github.com/newar/insights/shared/adapters"
 	"github.com/newar/insights/shared/constants"
-	"github.com/newar/insights/shared/database"
+	"github.com/newar/insights/shared/domain/services"
 	"github.com/newar/insights/shared/types"
 )
 
 type UserHandler struct {
-	userRepo *database.UserRepository
+	userService *services.UserService
+	adapter     *adapters.UserAdapter
 }
 
-func NewUserHandler(userRepo *database.UserRepository) *UserHandler {
-	return &UserHandler{userRepo: userRepo}
+func NewUserHandler(userService *services.UserService) *UserHandler {
+	return &UserHandler{
+		userService: userService,
+		adapter:     adapters.NewUserAdapter(),
+	}
 }
 
 // CreateUser handles POST /admin/users
@@ -37,7 +42,8 @@ func (h *UserHandler) CreateUser(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), constants.DefaultQueryTimeout)
 	defer cancel()
 
-	user, err := h.userRepo.Create(ctx, req)
+	// Use domain service
+	userEntity, err := h.userService.CreateUser(ctx, req.Email, req.Name, req.MaxConcurrentBots)
 	if err != nil {
 		log.Error().Err(err).Str("email", req.Email).Msg("Failed to create user")
 		return c.Status(500).JSON(fiber.Map{
@@ -48,12 +54,15 @@ func (h *UserHandler) CreateUser(c *fiber.Ctx) error {
 		})
 	}
 
+	// Convert entity to DTO for response
+	userDTO := h.adapter.ToDTO(userEntity)
+
 	log.Info().
-		Int64("user_id", user.ID).
-		Str("email", user.Email).
+		Int64("user_id", userDTO.ID).
+		Str("email", userDTO.Email).
 		Msg("User created successfully")
 
-	return c.Status(201).JSON(user)
+	return c.Status(201).JSON(userDTO)
 }
 
 // GetUser handles GET /admin/users/:id
@@ -68,7 +77,8 @@ func (h *UserHandler) GetUser(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), constants.DefaultQueryTimeout)
 	defer cancel()
 
-	user, err := h.userRepo.GetByID(ctx, int64(userID))
+	// Use domain service
+	userEntity, err := h.userService.GetUser(ctx, int64(userID))
 	if err != nil {
 		log.Warn().Err(err).Int("user_id", userID).Msg("User not found")
 		return c.Status(404).JSON(fiber.Map{
@@ -76,7 +86,10 @@ func (h *UserHandler) GetUser(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.JSON(user)
+	// Convert entity to DTO for response
+	userDTO := h.adapter.ToDTO(userEntity)
+
+	return c.JSON(userDTO)
 }
 
 // ListUsers handles GET /admin/users
@@ -94,7 +107,8 @@ func (h *UserHandler) ListUsers(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), constants.DefaultQueryTimeout)
 	defer cancel()
 
-	users, total, err := h.userRepo.List(ctx, limit, offset)
+	// Use domain service
+	userEntities, total, err := h.userService.ListUsers(ctx, limit, offset)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list users")
 		return c.Status(500).JSON(fiber.Map{
@@ -102,8 +116,11 @@ func (h *UserHandler) ListUsers(c *fiber.Ctx) error {
 		})
 	}
 
+	// Convert entities to DTOs
+	userDTOs := h.adapter.ToDTOList(userEntities)
+
 	return c.JSON(types.PaginatedResponse{
-		Data:   users,
+		Data:   userDTOs,
 		Total:  total,
 		Limit:  limit,
 		Offset: offset,
@@ -122,7 +139,8 @@ func (h *UserHandler) DeleteUser(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), constants.DefaultQueryTimeout)
 	defer cancel()
 
-	err = h.userRepo.Delete(ctx, int64(userID))
+	// Use domain service
+	err = h.userService.DeleteUser(ctx, int64(userID))
 	if err != nil {
 		log.Error().Err(err).Int("user_id", userID).Msg("Failed to delete user")
 		return c.Status(404).JSON(fiber.Map{
