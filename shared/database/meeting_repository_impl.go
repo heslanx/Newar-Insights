@@ -33,7 +33,7 @@ func (r *MeetingRepositoryImpl) Save(ctx context.Context, meeting *entities.Meet
 
 	// Check if meeting exists
 	var existingID int64
-	query := "SELECT id FROM meetings WHERE id = ?"
+	query := "SELECT id FROM meetings WHERE id = $1"
 	err := r.db.QueryRow(ctx, query, dto.ID).Scan(&existingID)
 
 	if err != nil {
@@ -45,7 +45,7 @@ func (r *MeetingRepositoryImpl) Save(ctx context.Context, meeting *entities.Meet
 				recording_path, recording_duration, error_message,
 				created_at, updated_at
 			)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 			RETURNING id
 		`
 		err = r.db.QueryRow(
@@ -73,9 +73,9 @@ func (r *MeetingRepositoryImpl) Save(ctx context.Context, meeting *entities.Meet
 		// Meeting exists, update
 		updateQuery := `
 			UPDATE meetings
-			SET status = ?, bot_container_id = ?, recording_path = ?,
-			    recording_duration = ?, error_message = ?, updated_at = ?
-			WHERE id = ?
+			SET status = $1, bot_container_id = $2, recording_path = $3,
+			    recording_duration = $4, error_message = $5, updated_at = $6
+			WHERE id = $7
 		`
 		_, err = r.db.Exec(
 			ctx,
@@ -103,7 +103,7 @@ func (r *MeetingRepositoryImpl) FindByID(ctx context.Context, id int64) (*entiti
 		SELECT id, user_id, platform, meeting_id, meeting_url, bot_name,
 		       bot_container_id, recording_session_id, status, recording_path,
 		       recording_duration, error_message, created_at, updated_at
-		FROM meetings WHERE id = ?
+		FROM meetings WHERE id = $1
 	`
 
 	var dto types.Meeting
@@ -138,7 +138,7 @@ func (r *MeetingRepositoryImpl) FindBySessionID(ctx context.Context, sessionID s
 		SELECT id, user_id, platform, meeting_id, meeting_url, bot_name,
 		       bot_container_id, recording_session_id, status, recording_path,
 		       recording_duration, error_message, created_at, updated_at
-		FROM meetings WHERE recording_session_id = ?
+		FROM meetings WHERE recording_session_id = $1
 	`
 
 	var dto types.Meeting
@@ -173,7 +173,7 @@ func (r *MeetingRepositoryImpl) FindByMeetingID(ctx context.Context, platform, m
 		SELECT id, user_id, platform, meeting_id, meeting_url, bot_name,
 		       bot_container_id, recording_session_id, status, recording_path,
 		       recording_duration, error_message, created_at, updated_at
-		FROM meetings WHERE platform = ? AND meeting_id = ?
+		FROM meetings WHERE platform = $1 AND meeting_id = $2
 	`
 
 	var dto types.Meeting
@@ -206,7 +206,7 @@ func (r *MeetingRepositoryImpl) FindByMeetingID(ctx context.Context, platform, m
 func (r *MeetingRepositoryImpl) FindByUserID(ctx context.Context, userID int64, limit, offset int) ([]*entities.Meeting, int, error) {
 	// Get total count
 	var total int
-	countQuery := "SELECT COUNT(*) FROM meetings WHERE user_id = ?"
+	countQuery := "SELECT COUNT(*) FROM meetings WHERE user_id = $1"
 	err := r.db.QueryRow(ctx, countQuery, userID).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count meetings: %w", err)
@@ -218,9 +218,9 @@ func (r *MeetingRepositoryImpl) FindByUserID(ctx context.Context, userID int64, 
 		       bot_container_id, recording_session_id, status, recording_path,
 		       recording_duration, error_message, created_at, updated_at
 		FROM meetings
-		WHERE user_id = ?
+		WHERE user_id = $1
 		ORDER BY created_at DESC
-		LIMIT ? OFFSET ?
+		LIMIT $2 OFFSET $3
 	`
 
 	rows, err := r.db.Query(ctx, query, userID, limit, offset)
@@ -239,7 +239,7 @@ func (r *MeetingRepositoryImpl) FindActiveByUserID(ctx context.Context, userID i
 		       bot_container_id, recording_session_id, status, recording_path,
 		       recording_duration, error_message, created_at, updated_at
 		FROM meetings
-		WHERE user_id = ?
+		WHERE user_id = $1
 		AND status IN ('joining', 'active', 'recording')
 		ORDER BY created_at DESC
 	`
@@ -283,7 +283,7 @@ func (r *MeetingRepositoryImpl) Update(ctx context.Context, meeting *entities.Me
 
 // Delete removes a meeting by ID
 func (r *MeetingRepositoryImpl) Delete(ctx context.Context, id int64) error {
-	query := "DELETE FROM meetings WHERE id = ?"
+	query := "DELETE FROM meetings WHERE id = $1"
 	result, err := r.db.Exec(ctx, query, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete meeting: %w", err)

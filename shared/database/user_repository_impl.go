@@ -32,14 +32,14 @@ func (r *UserRepositoryImpl) Save(ctx context.Context, user *entities.User) erro
 
 	// Check if user exists
 	var existingID int64
-	query := "SELECT id FROM users WHERE id = ?"
+	query := "SELECT id FROM users WHERE id = $1"
 	err := r.db.QueryRow(ctx, query, dto.ID).Scan(&existingID)
 
 	if err != nil {
 		// User doesn't exist, insert
 		insertQuery := `
 			INSERT INTO users (email, name, max_concurrent_bots, data, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?)
+			VALUES ($1, $2, $3, $4, $5, $6)
 			RETURNING id
 		`
 		err = r.db.QueryRow(
@@ -60,8 +60,8 @@ func (r *UserRepositoryImpl) Save(ctx context.Context, user *entities.User) erro
 		// User exists, update
 		updateQuery := `
 			UPDATE users
-			SET email = ?, name = ?, max_concurrent_bots = ?, data = ?, updated_at = ?
-			WHERE id = ?
+			SET email = $1, name = $2, max_concurrent_bots = $3, data = $4, updated_at = $5
+			WHERE id = $6
 		`
 		_, err = r.db.Exec(
 			ctx,
@@ -84,7 +84,7 @@ func (r *UserRepositoryImpl) Save(ctx context.Context, user *entities.User) erro
 
 // FindByID retrieves a user by ID
 func (r *UserRepositoryImpl) FindByID(ctx context.Context, id int64) (*entities.User, error) {
-	query := "SELECT id, email, name, max_concurrent_bots, data, created_at, updated_at FROM users WHERE id = ?"
+	query := "SELECT id, email, name, max_concurrent_bots, data, created_at, updated_at FROM users WHERE id = $1"
 
 	var dto types.User
 	err := r.db.QueryRow(ctx, query, id).Scan(
@@ -107,7 +107,7 @@ func (r *UserRepositoryImpl) FindByID(ctx context.Context, id int64) (*entities.
 
 // FindByEmail retrieves a user by email
 func (r *UserRepositoryImpl) FindByEmail(ctx context.Context, email string) (*entities.User, error) {
-	query := "SELECT id, email, name, max_concurrent_bots, data, created_at, updated_at FROM users WHERE email = ?"
+	query := "SELECT id, email, name, max_concurrent_bots, data, created_at, updated_at FROM users WHERE email = $1"
 
 	var dto types.User
 	err := r.db.QueryRow(ctx, query, email).Scan(
@@ -139,7 +139,7 @@ func (r *UserRepositoryImpl) FindAll(ctx context.Context, limit, offset int) ([]
 	}
 
 	// Get users
-	query := "SELECT id, email, name, max_concurrent_bots, data, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?"
+	query := "SELECT id, email, name, max_concurrent_bots, data, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2"
 
 	rows, err := r.db.Query(ctx, query, limit, offset)
 	if err != nil {
@@ -180,7 +180,7 @@ func (r *UserRepositoryImpl) FindAll(ctx context.Context, limit, offset int) ([]
 
 // Delete removes a user by ID
 func (r *UserRepositoryImpl) Delete(ctx context.Context, id int64) error {
-	query := "DELETE FROM users WHERE id = ?"
+	query := "DELETE FROM users WHERE id = $1"
 	result, err := r.db.Exec(ctx, query, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)
@@ -199,7 +199,7 @@ func (r *UserRepositoryImpl) CountActiveBots(ctx context.Context, userID int64) 
 	query := `
 		SELECT COUNT(*)
 		FROM meetings
-		WHERE user_id = ?
+		WHERE user_id = $1
 		AND status IN ('joining', 'active', 'recording')
 	`
 
