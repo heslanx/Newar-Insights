@@ -161,28 +161,55 @@ export default defineBackground(() => {
   async function handleStopRecording(payload: {
     meetingId: string;
   }): Promise<MessageResponse> {
+    console.log('[Newar Background] STOP_RECORDING requested for:', payload.meetingId);
+
     try {
       const apiKey = await storage.getApiKey();
+      console.log('[Newar Background] API Key for stop:', apiKey ? 'Found' : 'NOT FOUND');
+
       if (!apiKey) {
+        console.error('[Newar Background] No API key found, user not authenticated');
         throw new Error('Not authenticated');
       }
 
       // Stop recording
-      await apiClient.stopRecording(apiKey, payload.meetingId);
+      console.log('[Newar Background] Calling API to stop recording...');
+      const result = await apiClient.stopRecording(apiKey, payload.meetingId);
+      console.log('[Newar Background] Stop recording result:', result);
 
       // Update storage
+      console.log('[Newar Background] Updating storage...');
       await storage.updateActiveRecording(payload.meetingId, {
         status: 'stopping',
       });
 
       // Stop polling
+      console.log('[Newar Background] Stopping polling...');
       stopPolling(payload.meetingId);
+
+      const preferences = await storage.getPreferences();
+      if (preferences.notifyOnComplete) {
+        await showNotification({
+          title: 'Gravação Parada',
+          message: `Gravação finalizada: ${payload.meetingId}`,
+          iconUrl: '/icon/128.png',
+        });
+        console.log('[Newar Background] Stop notification shown');
+      }
+
+      console.log('[Newar Background] Recording stopped successfully');
 
       return {
         success: true,
+        data: result,
       };
     } catch (error) {
-      console.error('Error stopping recording:', error);
+      console.error('[Newar Background] Error stopping recording:', error);
+      console.error('[Newar Background] Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to stop recording',

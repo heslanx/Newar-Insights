@@ -13,7 +13,19 @@ async function fetcher<T>(url: string, options?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(error.error || error.message || 'Request failed');
+    const errorMessage = error.error || error.message || 'Request failed';
+
+    // Log authentication errors to help debugging
+    if (response.status === 401 || response.status === 403) {
+      console.error('[API Auth Error]', {
+        url,
+        status: response.status,
+        message: errorMessage,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    throw new Error(errorMessage);
   }
 
   return response.json();

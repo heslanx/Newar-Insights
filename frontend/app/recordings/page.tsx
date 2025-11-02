@@ -209,10 +209,24 @@ export default function RecordingsPage() {
               <Button variant="outline" onClick={() => setShowNewRecording(false)}>
                 Cancelar
               </Button>
-              <Button onClick={() => {
-                // TODO: Implement create recording
-                alert('Funcionalidade em desenvolvimento');
-                setShowNewRecording(false);
+              <Button onClick={async () => {
+                try {
+                  // Get user's first token
+                  const selectedUser = users.find(u => u.id.toString() === newRecording.user_id);
+                  if (!selectedUser) {
+                    alert('Selecione um usuário válido');
+                    return;
+                  }
+
+                  // Generate token if needed (you'll need to implement token retrieval)
+                  // For now, we'll assume the user has a token or we'll use admin API
+                  // This is a simplified version - ideally you'd have a token management system
+
+                  alert('Para criar gravações, use a extensão do Chrome ou a API diretamente. Esta funcionalidade administrativa está em desenvolvimento.');
+                  setShowNewRecording(false);
+                } catch (error: any) {
+                  alert('Erro ao criar gravação: ' + error.message);
+                }
               }}>
                 Criar Gravação
               </Button>

@@ -53,6 +53,20 @@ func main() {
 	userRepo := database.NewUserRepository(db)
 	tokenHandler := handlers.NewTokenHandler(tokenRepo, userRepo)
 
+	// Recording handler
+	recordingHandler := handlers.NewRecordingHandler(db)
+
+	// Bot handler (with Docker client)
+	botHandler, err := handlers.NewBotHandler()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to initialize bot handler")
+	}
+	defer botHandler.Close()
+	builder.Shutdown().Register("bot_handler", func() { botHandler.Close() })
+
+	// System handler
+	systemHandler := handlers.NewSystemHandler(db)
+
 	// Admin routes (require admin API key)
 	admin := builder.App().Group("/admin", middleware.AdminAuth)
 
@@ -64,6 +78,22 @@ func main() {
 
 	// Token management
 	admin.Post("/users/:id/tokens", tokenHandler.GenerateToken)
+
+	// Recording management
+	admin.Get("/recordings", recordingHandler.ListRecordings)
+	admin.Get("/users/:id/recordings", recordingHandler.GetRecordingsByUser)
+	admin.Delete("/recordings/:id", recordingHandler.DeleteRecording)
+	admin.Post("/recordings/cleanup", recordingHandler.CleanupStaleRecordings)
+
+	// Bot management
+	admin.Get("/bots/active", botHandler.GetActiveBots)
+	admin.Get("/bots/:containerId/logs", botHandler.GetBotLogs)
+	admin.Post("/bots/:containerId/stop", botHandler.StopBot)
+
+	// System management
+	admin.Get("/system/health", systemHandler.GetSystemHealth)
+	admin.Get("/system/metrics", systemHandler.GetSystemMetrics)
+	admin.Get("/system/logs", systemHandler.GetSystemLogs)
 
 	// Start server (blocks until shutdown)
 	builder.MustStart()

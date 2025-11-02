@@ -83,14 +83,14 @@ health: ## Check health of all services
 dev: build start init ## Full dev setup (build + start + init)
 	@echo "✅ Development environment ready!"
 
-admin: ## Start admin dashboard (Refine.dev)
-	@echo "🚀 Starting admin dashboard..."
-	cd admin && npm run dev
+frontend: ## Start frontend (Next.js)
+	@echo "🚀 Starting frontend..."
+	cd frontend && npm run dev
 
-all: start admin ## Start all services (backend + admin)
+all: start frontend ## Start all services (backend + frontend)
 	@echo "✅ All services running!"
 	@echo "  - Backend APIs: http://localhost:8080, http://localhost:8081, http://localhost:8082"
-	@echo "  - Admin Dashboard: http://localhost:3001"
+	@echo "  - Frontend: http://localhost:3000"
 
 ps: ## Show running containers
 	docker-compose ps

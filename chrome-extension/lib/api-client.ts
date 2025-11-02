@@ -239,15 +239,28 @@ class APIClient {
    * Stop recording
    */
   async stopRecording(apiKey: string, meetingId: string): Promise<StopRecordingResponse> {
-    return this.fetch<StopRecordingResponse>(
-      `${this.apiGatewayUrl}/recordings/google_meet/${meetingId}`,
-      {
-        method: 'DELETE',
-        headers: {
-          'X-API-Key': apiKey,
-        },
-      }
-    );
+    console.log('[Newar API] Stopping recording...');
+    console.log('[Newar API] URL:', `${this.apiGatewayUrl}/recordings/google_meet/${meetingId}`);
+    console.log('[Newar API] API Key:', apiKey.substring(0, 15) + '...');
+    console.log('[Newar API] Meeting ID:', meetingId);
+
+    try {
+      const result = await this.fetch<StopRecordingResponse>(
+        `${this.apiGatewayUrl}/recordings/google_meet/${meetingId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'X-API-Key': apiKey,
+          },
+        }
+      );
+
+      console.log('[Newar API] Recording stopped successfully:', result);
+      return result;
+    } catch (error) {
+      console.error('[Newar API] Failed to stop recording:', error);
+      throw error;
+    }
   }
 
   /**

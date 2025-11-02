@@ -129,20 +129,32 @@ function App() {
   }, [data?.currentMeetingId]);
 
   const handleStopRecording = useCallback(async () => {
-    if (!data?.currentMeetingId) return;
+    if (!data?.currentMeetingId) {
+      console.error('[Popup] Cannot stop: no meeting ID');
+      return;
+    }
 
+    console.log('[Popup] Stop recording button clicked for:', data.currentMeetingId);
     setLoading(true);
     try {
+      console.log('[Popup] Sending STOP_RECORDING message...');
       const response = await chrome.runtime.sendMessage({
         type: 'STOP_RECORDING',
         payload: { meetingId: data.currentMeetingId },
       });
 
+      console.log('[Popup] Stop recording response:', response);
+
       if (response.success) {
+        console.log('[Popup] Recording stopped successfully, reloading popup data...');
         await loadPopupData();
+      } else {
+        console.error('[Popup] Stop recording failed:', response.error);
+        alert(`Erro ao parar gravação: ${response.error}`);
       }
     } catch (error) {
-      console.error('Error stopping recording:', error);
+      console.error('[Popup] Error stopping recording:', error);
+      alert(`Erro ao parar gravação: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
     } finally {
       setLoading(false);
     }
